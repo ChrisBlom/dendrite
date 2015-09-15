@@ -26,7 +26,10 @@ uniform mat4 MVP;
 
 void main(){
    gl_Position = MVP * vec4(position, 0.0, 1.0);
-   c = color;
+   float d = sqrt ( (position.x * position.x) + (position.y * position.y) ) ;
+   float r = atan(position.x , position.y);
+   float v = max(d ,d+ sin(r*8));
+   c = vec3(v,v,v)		   ;
 }
 END
 )
@@ -162,6 +165,18 @@ END
 
 (define shape (disk 100))
 
+(define (render-shape shape mvp)
+  (gl:bind-vertex-array 0)
+  (gl:uniform-matrix4fv (gl:get-uniform-location (program) "MVP")
+			1 #f
+			mvp)
+  (gl:bind-vertex-array (mesh-vao shape))
+  (gl:draw-elements-base-vertex (mode->gl (mesh-mode shape))
+				(mesh-n-indices shape)
+				(type->gl (mesh-index-type shape))
+				#f 0))
+
+
 
 (define (render)
   (let ([mvp (m* (projection-matrix)
@@ -169,31 +184,17 @@ END
 		     (model-matrix)))]
 
 	[mvp2 (m* (projection-matrix)
-		  (m* (view-matrix)
-		      (translate (make-point (sin (box-ref r))
-					     (cos (box-ref r))
-					     0)
-				 (model-matrix))))]
-	)
+		  (m*
+		   (translation (make-point (* 2 (sin (box-ref r)))
+					    (* 2 (cos (box-ref r)))
+					    0))
+		   (m* (view-matrix)
+		       (model-matrix))))])
     ;; shaders
     (gl:use-program (program))
 
-
-    (gl:bind-vertex-array 0)
-    (gl:uniform-matrix4fv (gl:get-uniform-location (program) "MVP")
-			  1 #f
-			  mvp)
-    (gl:bind-vertex-array (mesh-vao shape))
-    (gl:draw-elements-base-vertex (mode->gl (mesh-mode shape))
-				  (mesh-n-indices shape)
-				  (type->gl (mesh-index-type shape))
-				  #f 0)
-
-    (gl:bind-vertex-array 0)
-    (gl:uniform-matrix4fv (gl:get-uniform-location (program) "MVP")
-    			  1 #f
-    			  mvp2)
-    (gl:bind-vertex-array (mesh-vao shape))
+    (render-shape shape mvp)
+    (render-shape shape mvp2)
 
     ;; draw shape
     (gl:draw-elements-base-vertex (mode->gl (mesh-mode shape))
@@ -208,6 +209,9 @@ END
                       [(and (eq? key glfw:+key-escape+) (eq? action glfw:+press+))
                        (glfw:set-window-should-close window #t)])))
 
+
+(define repl-thread #f)
+
 (define (main)
   (glfw:with-window (800 600 "Example"
 			 resizable: #f
@@ -217,6 +221,8 @@ END
 			 opengl-profile: glfw:+opengl-core-profile+)
    (gl:init)
    ;; (print (gl:supported? "GL_ARB_framebuffer_object"))
+
+   (set! repl-thread (thread-start! (make-thread repl)))
 
    (set! *vertex* (make-shader gl:+vertex-shader+ *vertex*))
 
@@ -245,9 +251,10 @@ END
 ;(use nrepl)
 ;(define nrepl-thread (thread-start! (lambda () (nrepl 1234))))
 
-(define main-thread (thread-start! (make-thread (lambda () (print 'main) (main)))))
+;(define main-thread (thread-start! (make-thread (lambda () (print 'main) (main)))))
+(main)
 
-(repl)
+
 
 
 ;; run (use box) again in the repl
