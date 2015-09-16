@@ -34,6 +34,24 @@ void main(){
 END
 )
 
+(define *vertex2*
+#<<END
+#version 330
+in vec2 position;
+in vec3 color;
+out vec3 c;
+uniform mat4 MVP;
+
+void main(){
+   gl_Position = MVP * vec4(position, 0.0, 1.0);
+   float d = sqrt ( (position.x * position.x) + (position.y * position.y) ) ;
+   float r = atan(position.x , position.y);
+   float v = 1.0 - d;
+   c = vec3(v+ sin(r*20),v,v)		;
+}
+END
+)
+
 (define *fragment*
 #<<END
 #version 330
@@ -142,12 +160,12 @@ END
 					      0 2 3))))
 
 (define program (make-parameter #f))
+(define program2 (make-parameter #f))
 
 (define (projection-matrix)
   (perspective 800 600 0.1 100 70))
 
 (define d (make-box 5.0))
-
 (define r (make-box 0.0))
 
 (define (eye)
@@ -194,6 +212,9 @@ END
     (gl:use-program (program))
 
     (render-shape shape mvp)
+
+    (gl:use-program (program2))
+
     (render-shape shape mvp2)
 
     ;; draw shape
@@ -209,8 +230,11 @@ END
                       [(and (eq? key glfw:+key-escape+) (eq? action glfw:+press+))
                        (glfw:set-window-should-close window #t)])))
 
-
-(define repl-thread #f)
+(define (set-shaders! vertex-string fragment-string)
+  (let ([vertex-shader-id   (make-shader gl:+vertex-shader+ vertex-string)]
+	[fragment-shader-id (make-shader gl:+fragment-shader+ fragment-string)])
+    ;; compile shader, set program parameter using
+    (make-program (list vertex-shader-id fragment-shader-id))))
 
 (define (main)
   (glfw:with-window (800 600 "Example"
@@ -220,16 +244,12 @@ END
 			 opengl-forward-compat: #t
 			 opengl-profile: glfw:+opengl-core-profile+)
    (gl:init)
-   ;; (print (gl:supported? "GL_ARB_framebuffer_object"))
+   ;; (print (:supported? "GL_ARB_framebuffer_object"))
 
    (set! repl-thread (thread-start! (make-thread repl)))
 
-   (set! *vertex* (make-shader gl:+vertex-shader+ *vertex*))
-
-   (set! *fragment* (make-shader gl:+fragment-shader+ *fragment*))
-
-   ;; compile shader, set program parameter
-   (program (make-program (list *vertex* *fragment*)))
+   (program (set-shaders! *vertex2* *fragment*))
+   (program2 (set-shaders! *vertex* *fragment*))
 
    ;; create shape vertex array opbject
    (mesh-make-vao! shape `((position . ,(gl:get-attrib-location
@@ -242,16 +262,20 @@ END
      (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
      (render)
      (glfw:poll-events) ; Because of the context version, initializing GLEW results in a harmless invalid enum
-     (thread-yield!)
+;     (thread-yield!)
      (unless (glfw:window-should-close (glfw:window))
        (box-swap! r + 0.01)
        (loop (+ .01 i))))))
 
 
-;(use nrepl)
-;(define nrepl-thread (thread-start! (lambda () (nrepl 1234))))
-
+(use nrepl)
+(define nrepl-thread (thread-start! (lambda () (nrepl 1234))))
 ;(define main-thread (thread-start! (make-thread (lambda () (print 'main) (main)))))
+
+(define repl-thread (thread-start! (make-thread repl)))
+;(set-shaders! *vertex2* *fragment*)
+
+
 (main)
 
 
