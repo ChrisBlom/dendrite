@@ -175,11 +175,13 @@ END
 	      ))
 
 (define (view-matrix)
-  (look-at (eye)
-           (make-point 0 0 0)
-           (make-point 0 2 0)))
+  (look-at (eye) ; eye
+           (make-point 0 0 0) ; object
+           (make-point 0 1 0) ; up vector
+	   ))
 
-(define (model-matrix) (mat4-identity))
+(define (model-matrix)
+  (mat4-identity))
 
 (define shape (disk 100))
 
