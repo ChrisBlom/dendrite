@@ -42,55 +42,81 @@ typedef unsigned char cpBool;
  (import-for-syntax bind-translator matchable debug)
 					;(include "acorn-transformer.scm")
 
-
- (define (->reference-type type)
-   (pp (cons 'reference-vect= type))
+ (define (convert-arg-type type)
    (match type
-     [('const c) (begin (pp 'const) `(const ,(->reference-type c))) ]
+     [('const c) `(const ,(convert-arg-type c)) ]
      ["cpVect" `(c-pointer ,type )]
      [other other]
      ))
 
- (define (refer-args type-var-pairs)
-   (map (lambda (type-var)
-	  (list (->reference-type (car type-var))
-		(cdr type-var)))
-	type-var-pairs))
+(define (vect-type? arg-type)
+   (match arg-type
+     [('const c) (vect-type? c)]
+     ["cpVect" #t]
+     [other other]))
 
+ (define (vect-args? args.)
+   (any vect-type? (map car args)))
+
+ (define (convert-ret-type type)
+;   (pp (cons 'reference-vect= type))
+   (match type
+     [('const c) `(const ,(convert-arg-type c)) ]
+     ["cpVect" 'void]
+     [other other]
+     ))
+; (convert-ret-type "cpVect") ;=> void
+
+(define (convert-args type-var-pairs add-destination)
+  (let ([converted-args (map (lambda (type-var)
+			       (list (convert-arg-type (car type-var))
+				     (cadr type-var)))
+			     type-var-pairs)])
+    (if add-destination
+	(cons '((c-pointer "cpVect")  dest) converted-args)
+	converted-args)))
+
+ (define (spy x)
+   (pp x)
+   x
+   )
 
  ;; workaound to convert passing cpVect by value to passing cpVect by reference
  (define (f64struct-arg-transformer x rename)
    (display " x --------\n")
    (pp x)
    (display " rename --------\n")
-   (match x
-     [(foreign-lambda* return-type args body)
-      (begin (pp args) x)
+   (spy
+    (match x
+      [(foreign-lambda* return-type args body)
+       (begin (pp args) x)
 
-      (pp (cons 'mpd= (refer-args args)))
+					;(pp (cons 'mpd= (convert-args args)))
 
-      (bind-foreign-lambda*
-       `(,foreign-lambda*
-	    ,return-type ;; todo, if cpVect, return void
-	    ,args ;; todo, if cpVect add 'destination' args
-	  ,body ;; todo, if cpVect, deref cpVect args and set destination arg
-	  )
-       rename)]
-     [other other]))
+       (bind-foreign-lambda*
+	`(,foreign-lambda*
+	     ,(convert-ret-type return-type)
+	     ,(spy  (convert-args args (vect-type? return-type)))
+	   ,body ;; todo, if cpVect, deref cpVect args and set destination arg
+	   )
+	rename)]
+      [other other])))
 
  )
 (bind-options default-renaming: "" foreign-transformer: f64struct-arg-transformer)
 
 
-(bind* "typedef unsigned char cpBool;
+(bind* "
+typedef unsigned char cpBool;
 
-static inline cpBool cpvnear(const cpVect v1, const cpVect v2, const cpFloat dist)
+
+static inline cpBool cpvnear1(const cpVect v1, const cpVect v2, const double dist)
 {
 	return cpvdistsq(v1, v2) < dist*dist;
 }
 
 
-static inline cpVect cpvadd(const cpVect v1, const cpVect v2)
+static inline cpVect cpvadd1(const cpVect v1, const cpVect v2)
 {
 	return cpv(v1.x + v2.x, v1.y + v2.y);
 }
