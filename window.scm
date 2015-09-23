@@ -159,8 +159,8 @@ END
                          initial-elements: (0 1 2
 					      0 2 3))))
 
-(define program (make-parameter #f))
-(define program2 (make-parameter #f))
+(define program (make-box #f))
+(define program2 (make-box #f))
 
 (define (projection-matrix)
   (perspective 800 600 0.1 100 70))
@@ -187,7 +187,7 @@ END
 
 (define (render-shape shape mvp)
   (gl:bind-vertex-array 0)
-  (gl:uniform-matrix4fv (gl:get-uniform-location (program) "MVP")
+  (gl:uniform-matrix4fv (gl:get-uniform-location (box-ref program) "MVP")
 			1 #f
 			mvp)
   (gl:bind-vertex-array (mesh-vao shape))
@@ -211,12 +211,10 @@ END
 		   (m* (view-matrix)
 		       (model-matrix))))])
     ;; shaders
-    (gl:use-program (program))
-
+    (gl:use-program (box-ref program))
     (render-shape shape mvp)
 
-    (gl:use-program (program2))
-
+    (gl:use-program (box-ref program2))
     (render-shape shape mvp2)
 
     ;; draw shape
@@ -248,39 +246,40 @@ END
    (gl:init)
    ;; (print (:supported? "GL_ARB_framebuffer_object"))
 
-   (set! repl-thread (thread-start! (make-thread repl)))
+   ;(set! repl-thread (thread-start! (make-thread repl)))
 
-   (program (set-shaders! *vertex2* *fragment*))
-   (program2 (set-shaders! *vertex* *fragment*))
+
+   (set-box! program (set-shaders! *vertex* *fragment*))
+   (set-box! program2 (set-shaders! *vertex2* *fragment*))
 
    ;; create shape vertex array opbject
    (mesh-make-vao! shape `((position . ,(gl:get-attrib-location
-					(program) "position"))
+					(box-ref program) "position"))
 			  (color . ,(gl:get-attrib-location
-				     (program) "color"))))
+				     (box-ref program) "color"))))
 
    (let loop ([i 0])
      (glfw:swap-buffers (glfw:window))
      (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
      (render)
      (glfw:poll-events) ; Because of the context version, initializing GLEW results in a harmless invalid enum
-;     (thread-yield!)
+     (thread-yield!)
      (unless (glfw:window-should-close (glfw:window))
        (box-swap! r + 0.01)
        (loop (+ .01 i))))))
 
 
-(use nrepl)
-(define nrepl-thread (thread-start! (lambda () (nrepl 1234))))
-;(define main-thread (thread-start! (make-thread (lambda () (print 'main) (main)))))
+;;(use nrepl)
+;(define nrepl-thread (thread-start! (lambda () (nrepl 1234))))
+
+(define main-thread (thread-start! (make-thread main)))
 
 (define repl-thread (thread-start! (make-thread repl)))
-;(set-shaders! *vertex2* *fragment*)
 
+(define (ch)
+  (use box)
+  (set-box! program (set-shaders! *vertex2* *fragment*)))
 
-(main)
-
-
-
+(thread-join! main-thread)
 
 ;; run (use box) again in the repl
