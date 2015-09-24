@@ -2,7 +2,6 @@
 
 #>
 #include <chipmunk/chipmunk.h>
-typedef unsigned char cpBool;
 <#
 
 (define-foreign-type cpVect "cpVect")
@@ -39,7 +38,8 @@ typedef unsigned char cpBool;
  (define (convert-arg-type type)
    (match type
      [('const c) `(const ,(convert-arg-type c)) ]
-     ["cpVect" `(c-pointer ,type )] ;; TODO convert to f64vector
+     ["cpVect" '(c-pointer "cpVect")		;`(c-pointer ,type )
+      ] ;; TODO convert to f64vector
      [other other]
      ))
 
@@ -64,7 +64,7 @@ typedef unsigned char cpBool;
 				     (cadr type-var)))
 			     type-var-pairs)])
     (if add-destination
-	(cons '((c-pointer "cpVect")  dest) converted-args)
+	(cons '(f64vector  dest) converted-args)
 	converted-args)))
 
 (define (spy . args)
@@ -95,17 +95,24 @@ typedef unsigned char cpBool;
    (spy
     (match x
       [(foreign-lambda* return-type args body)
-       `,(spy 'flamba  (bind-foreign-lambda*
-			`(,foreign-lambda*
-			     ,(spy 'aaa-return  (convert-ret-type return-type)) ; return type
-			     ,(spy 'aaa-args  (convert-args args (vect-type? return-type))) ; args
-			   ,(spy 'aaa-body ((if (vect-type? return-type)
-						wrap-destination
-						identity)
-					    (convert-body body args)))
-			   ;; todo, if cpVect, deref cpVect args and set destination arg
-			   )
-			rename))]
+       (let ([name (string->symbol (car body))]
+	     [argnames (apply append (map cdr args))])
+	 (spy 'argname argnames)
+	 `(lambda ,argnames
+	    (,(rename 'let) ([dest (make-f64vector 2 0)])
+	     ,(bind-foreign-lambda*
+	       `(,foreign-lambda*
+		    ,(convert-ret-type return-type) ; return type
+		    ,(convert-args args (vect-type? return-type)) ; args
+		  ,((if (vect-type? return-type)
+			wrap-destination
+			identity)
+		    (convert-body body args)))
+	       rename)
+	     (display 'dest=)
+	     (display dest)
+	     dest
+	     )))]
       [other other]))))
 
 (bind-options default-renaming: "" foreign-transformer: f64struct-arg-transformer)
