@@ -38,7 +38,7 @@
  (define (convert-arg-type type)
    (match type
      [('const c) `(const ,(convert-arg-type c)) ]
-     ["cpVect" '(c-pointer "cpVect")		;`(c-pointer ,type )
+     ["cpVect" 'f64vector;'(c-pointer "cpVect")		;`(c-pointer ,type )
       ] ;; TODO convert to f64vector
      [other other]
      ))
@@ -64,7 +64,7 @@
 				     (cadr type-var)))
 			     type-var-pairs)])
     (if add-destination
-	(cons '(f64vector  dest) converted-args)
+	(cons '(f64vector dest) converted-args)
 	converted-args)))
 
 (define (spy . args)
@@ -77,15 +77,15 @@
       (match x
 	[() '()]
 	[ (h . t) (cons (if (member h conv-args)
-			    `(deref ,h)
+			    (spy 'derefed= `(deref ,(conc "((cpVect*)"  h ")") ))
 			    h)
 			(loop t))]))))
+
 
 (define (wrap-destination body)
   `(stmt
     (= "cpVect* r" "(cpVect*) dest")
-    (= "*r" ,body)))
-
+    (= "*r" ,(spy 'actual-body= body))))
 
  ;; workaound to convert passing cpVect by value to passing cpVect by reference
  (define (f64struct-arg-transformer x rename)
@@ -95,24 +95,36 @@
    (spy
     (match x
       [(foreign-lambda* return-type args body)
-       (let ([name (string->symbol (car body))]
-	     [argnames (apply append (map cdr args))])
-	 (spy 'argname argnames)
-	 `(lambda ,argnames
-	    (,(rename 'let) ([dest (make-f64vector 2 0)])
-	     ,(bind-foreign-lambda*
-	       `(,foreign-lambda*
-		    ,(convert-ret-type return-type) ; return type
-		    ,(convert-args args (vect-type? return-type)) ; args
-		  ,((if (vect-type? return-type)
-			wrap-destination
-			identity)
-		    (convert-body body args)))
-	       rename)
-	     (display 'dest=)
-	     (display dest)
-	     dest
-	     )))]
+
+       (let* ([name (string->symbol (car body))]
+
+	     [argnames (apply append (map cdr args))]
+
+	     ;; bind the foreign function with converted return type, args and body
+	     [bound-foreign-lambda (bind-foreign-lambda*
+
+				    `(,foreign-lambda*
+					 ; return type : cpVect -> void
+					 ,(convert-ret-type return-type)
+					 ;; args: cpVect -> f64vector, prepend 'dest' arg if return type is cpVect
+					 ,(convert-args args (vect-type? return-type)) ; args
+				       ;;  body: cast and deref al cpVect args
+				       ;; if a cpVect must be returned, assign the dest arg instead
+				       ,((if (vect-type? return-type)
+					     wrap-destination
+					     identity)
+					 (convert-body body args)))
+
+				    rename)])
+
+	 (if (vect-type? return-type)
+	     ;; wrap in a function that provides the 'dest' arg
+	     `(lambda ,argnames
+		(,(rename 'let) ([dest (make-f64vector 2 0)])
+		 (,bound-foreign-lambda ,@(cons 'dest argnames))
+		 dest))
+
+	     bound-foreign-lambda))]
       [other other]))))
 
 (bind-options default-renaming: "" foreign-transformer: f64struct-arg-transformer)
