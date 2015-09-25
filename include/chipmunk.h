@@ -28,17 +28,16 @@
 #ifdef WIN32
 	// For alloca().
 	#include <malloc.h>
-	#define CP_EXPORT __declspec(dllexport)
+	#define __declspec(dllexport)
 #else
 	#include <alloca.h>
-	#define CP_EXPORT
-#endif
+	#define #endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-CP_EXPORT void cpMessage(const char *condition, const char *file, int line, int isError, int isHardError, const char *message, ...);
+void cpMessage(const char *condition, const char *file, int line, int isError, int isHardError, const char *message, ...);
 #ifdef NDEBUG
 	#define	cpAssertWarn(__condition__, ...)
 	#define	cpAssertSoft(__condition__, ...)
@@ -106,7 +105,7 @@ typedef struct cpSpace cpSpace;
 
 
 #include "cpVect.h"
-#include "cpBB.h"
+// #include "cpBB.h"
 #include "cpTransform.h"
 #include "cpSpatialIndex.h"
 
@@ -126,44 +125,44 @@ typedef struct cpSpace cpSpace;
 #define CP_VERSION_RELEASE 1
 
 /// Version string.
-CP_EXPORT extern const char *cpVersionString;
+extern const char *cpVersionString;
 
 /// Calculate the moment of inertia for a circle.
 /// @c r1 and @c r2 are the inner and outer diameters. A solid circle has an inner diameter of 0.
-CP_EXPORT cpFloat cpMomentForCircle(cpFloat m, cpFloat r1, cpFloat r2, cpVect offset);
+cpFloat cpMomentForCircle(cpFloat m, cpFloat r1, cpFloat r2, cpVect offset);
 
 /// Calculate area of a hollow circle.
 /// @c r1 and @c r2 are the inner and outer diameters. A solid circle has an inner diameter of 0.
-CP_EXPORT cpFloat cpAreaForCircle(cpFloat r1, cpFloat r2);
+cpFloat cpAreaForCircle(cpFloat r1, cpFloat r2);
 
 /// Calculate the moment of inertia for a line segment.
 /// Beveling radius is not supported.
-CP_EXPORT cpFloat cpMomentForSegment(cpFloat m, cpVect a, cpVect b, cpFloat radius);
+cpFloat cpMomentForSegment(cpFloat m, cpVect a, cpVect b, cpFloat radius);
 
 /// Calculate the area of a fattened (capsule shaped) line segment.
-CP_EXPORT cpFloat cpAreaForSegment(cpVect a, cpVect b, cpFloat radius);
+cpFloat cpAreaForSegment(cpVect a, cpVect b, cpFloat radius);
 
 /// Calculate the moment of inertia for a solid polygon shape assuming it's center of gravity is at it's centroid. The offset is added to each vertex.
-CP_EXPORT cpFloat cpMomentForPoly(cpFloat m, int count, const cpVect *verts, cpVect offset, cpFloat radius);
+cpFloat cpMomentForPoly(cpFloat m, int count, const cpVect *verts, cpVect offset, cpFloat radius);
 
 /// Calculate the signed area of a polygon. A Clockwise winding gives positive area.
 /// This is probably backwards from what you expect, but matches Chipmunk's the winding for poly shapes.
-CP_EXPORT cpFloat cpAreaForPoly(const int count, const cpVect *verts, cpFloat radius);
+cpFloat cpAreaForPoly(const int count, const cpVect *verts, cpFloat radius);
 
 /// Calculate the natural centroid of a polygon.
-CP_EXPORT cpVect cpCentroidForPoly(const int count, const cpVect *verts);
+cpVect cpCentroidForPoly(const int count, const cpVect *verts);
 
 /// Calculate the moment of inertia for a solid box.
-CP_EXPORT cpFloat cpMomentForBox(cpFloat m, cpFloat width, cpFloat height);
+cpFloat cpMomentForBox(cpFloat m, cpFloat width, cpFloat height);
 
 /// Calculate the moment of inertia for a solid box.
-CP_EXPORT cpFloat cpMomentForBox2(cpFloat m, cpBB box);
+cpFloat cpMomentForBox2(cpFloat m, cpBB box);
 
 /// Calculate the convex hull of a given set of points. Returns the count of points in the hull.
 /// @c result must be a pointer to a @c cpVect array with at least @c count elements. If @c verts == @c result, then @c verts will be reduced inplace.
 /// @c first is an optional pointer to an integer to store where the first vertex in the hull came from (i.e. verts[first] == result[0])
 /// @c tol is the allowed amount to shrink the hull when simplifying it. A tolerance of 0.0 creates an exact hull.
-CP_EXPORT int cpConvexHull(int count, const cpVect *verts, cpVect *result, int *first, cpFloat tol);
+int cpConvexHull(int count, const cpVect *verts, cpVect *result, int *first, cpFloat tol);
 
 #ifdef _MSC_VER
 #include "malloc.h"

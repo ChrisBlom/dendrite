@@ -1,6 +1,7 @@
 (import scheme chicken foreign srfi-4 bind bind-translator matchable)
 
 #>
+#include <chipmunk/chipmunk_private.h>
 #include <chipmunk/chipmunk.h>
 <#
 
@@ -36,7 +37,13 @@
      [('const c) `(const ,(convert-arg-type c)) ]
      ["cpVect" 'f64vector]
      [('struct "cpVect") (convert-arg-type "cpVect")  ]
+     [('struct "cpBB") (convert-arg-type "cpVect")  ]
+     ["cpBB" (convert-arg-type "cpVect")  ]
+     ["cpTransform" (convert-arg-type "cpVect")  ]
+     [('struct "cpTransform") (convert-arg-type "cpVect")  ]
      ["cpMat2x2" 'f64vector]
+     ["uintptr_t" 'long]
+;     ["cpContactPointSet" '(pointer cpContactPointSet)]		;
      [other other]))
 
  (define (vect-type? arg-type)
@@ -79,7 +86,7 @@
 	[() '()]
 	[ (h . t)
 	  (cons (if (member h conv-args)
-		    (spy 'derefed= `(deref ,(conc "((" (spy (alist-ref h arg->type)) "*)"  h ")") ))
+		    `(deref ,(conc "((" (alist-ref h arg->type) "*)"  h ")") )
 		    h)
 		(loop t))]))))
 
@@ -96,9 +103,9 @@
 
 (define (wrap-destination body return-type)
   `(stmt
-    (= ,(string-append return-type "* r")
+    (= ,(string-append return-type "* r_")
        ,(string-append "(" return-type"*) dest"))
-    (= "*r" ,(spy 'actual-body= body))))
+    (= "*r_" ,body )))
 
  ;; workaound to convert passing cpVect by value to passing cpVect by reference
  (define (f64struct-arg-transformer x rename)
@@ -134,17 +141,23 @@
 	   (if (vect-type? return-type)
 	       ;; wrap in a function that provides the 'dest' arg
 	       `(lambda ,argnames
-		  (,(rename 'let) ([dest (make-f64vector 2 0)])
+		  (,(rename 'let) ([dest (make-f64vector ,(match (spy (extract-type return-type))
+							    ["cpBB" 4]
+							    ["cpVect" 2]
+							    ["cpMat2x2" 4]
+							    ["cpTransform" 6]) 0)])
 		   (,bound-foreign-lambda ,@(cons 'dest argnames))
 		   dest))
+	       bound-foreign-lambda
 
-	       bound-foreign-lambda)))]
+
+	       )))]
       [other other]))))
 
 
 (bind-include-path "./include")
 
-(bind-options ;default-renaming: ""
+(bind-options default-renaming: ""
 	      foreign-transformer: f64struct-arg-transformer)
 
 ;; (bind* "
@@ -179,10 +192,17 @@
 ;;   ")
 
 
-;; (bind-file "include/chipmunk_types.h")
-; (bind-file "include/cpVect.h")
+(bind-file "include/chipmunk_types.h")
+(bind-file "include/cpVect.h")
+;;(bind-file "include/cpBB.h")
 
-(bind-file "include/cpv.h")
+;;(bind-file "include/cpSpatialIndex.h")
+;;(bind-file "include/cpTransform.h")
+
+;(bind-file "include/chipmunk.h")
+
+(bind-file "include/cpArbiter.h")
+;(bind-file "include/cpConstraint.h")
 
 (define x (cpv 1. 1.))
 (define y (cpv 1. 1.))

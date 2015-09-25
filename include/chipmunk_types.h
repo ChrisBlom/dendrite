@@ -164,7 +164,7 @@ static inline cpFloat cpflerpconst(cpFloat f1, cpFloat f2, cpFloat d)
 //#ifdef CP_HASH_VALUE_TYPE
 //	typedef CP_HASH_VALUE_TYPE cpHashValue;
 //#else
-	typedef uintptr_t cpHashValue;
+typedef uintptr_t cpHashValue;
 //#endif
 
 /// Type used internally to cache colliding object info for cpCollideShapes().
@@ -257,10 +257,12 @@ typedef struct cpVect /* {cpFloat x,y;} */ cpVect;
 /* 	typedef CGAffineTransform cpTransform; */
 /* #else */
 /* 	/// Column major affine transform. */
-/* 	typedef struct cpTransform { */
-/* 		cpFloat a, b, c, d, tx, ty; */
-/* 	} cpTransform; */
-/* #endif */
+typedef struct cpTransform
+//{
+  //		cpFloat a, b, c, d, tx, ty;
+//	}
+cpTransform;
+//#endif
 
 /* // NUKE */
 /* typedef struct cpMat2x2 { */

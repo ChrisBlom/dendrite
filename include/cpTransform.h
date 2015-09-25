@@ -1,15 +1,15 @@
 /* Copyright (c) 2013 Scott Lembcke and Howling Moon Software
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -90,7 +90,7 @@ cpTransformbBB(cpTransform t, cpBB bb)
 	cpVect center = cpBBCenter(bb);
 	cpFloat hw = (bb.r - bb.l)*0.5;
 	cpFloat hh = (bb.t - bb.b)*0.5;
-	
+
 	cpFloat a = t.a*hw, b = t.c*hh, d = t.b*hw, e = t.d*hh;
 	cpFloat hw_max = cpfmax(cpfabs(a + b), cpfabs(a - b));
 	cpFloat hh_max = cpfmax(cpfabs(d + e), cpfabs(d - e));
@@ -176,7 +176,7 @@ cpTransformOrtho(cpBB bb)
 static inline cpTransform
 cpTransformBoneScale(cpVect v0, cpVect v1)
 {
-  cpVect d = cpvsub(v1, v0); 
+  cpVect d = cpvsub(v1, v0);
   return cpTransformNewTranspose(
     d.x, -d.y, v0.x,
     d.y,  d.x, v0.y
@@ -188,7 +188,7 @@ cpTransformAxialScale(cpVect axis, cpVect pivot, cpFloat scale)
 {
   cpFloat A = axis.x*axis.y*(scale - 1.0);
   cpFloat B = cpvdot(axis, pivot)*(1.0 - scale);
-  
+
   return cpTransformNewTranspose(
     scale*axis.x*axis.x + axis.y*axis.y, A, axis.x*B,
     A, axis.x*axis.x + scale*axis.y*axis.y, axis.y*B
