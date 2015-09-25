@@ -4,6 +4,11 @@
 #include <chipmunk/chipmunk.h>
 <#
 
+
+(define type-size
+  '(("cpVect" . 2)
+    ("cpMat2x2" . 4)))
+
 (define cpv* (foreign-lambda* void ( (f64vector dest) (float x) (float y))
 	      "cpVect* r = (cpVect*) dest;
                r->x = x;
@@ -61,20 +66,38 @@
    (pp args)
    (last args))
 
-(define (convert-body body args)
-  (let ([conv-args (spy 'conv-args= (apply append (map cdr (filter (compose vect-type? car) args))))])
+(define (convert-body body args return-type)
+  (let ([conv-args (apply append (map cdr (filter (compose vect-type? car) args)))]
+	[arg->type (fold (lambda (arg-pair acc)
+			     (let* ([var (second arg-pair)]
+				    [type (extract-type (first arg-pair))])
+			       (alist-cons var type acc)))
+			   '()
+			   args)])
     (let loop ([x body])
       (match x
 	[() '()]
-	[ (h . t) (cons (if (member h conv-args)
-			    (spy 'derefed= `(deref ,(conc "((cpVect*)"  h ")") ))
-			    h)
-			(loop t))]))))
+	[ (h . t)
+	  (cons (if (member h conv-args)
+		    (spy 'derefed= `(deref ,(conc "((" (spy (alist-ref h arg->type)) "*)"  h ")") ))
+		    h)
+		(loop t))]))))
+
+;; (define cpv+* (foreign-lambda* void ( (f64vector dest) (f64vector x) (f64vector y))
+;; 	      "cpVect* r = (cpVect*) dest;
+;;                *r = cpvadd( *( (cpVect*) x) , *( (cpVect*) y) );"))
 
 
-(define (wrap-destination body)
+(define (extract-type type)
+  (match type
+    [('struct x) (extract-type x)]
+    [('const x) (extract-type x)]
+    [other other]))
+
+(define (wrap-destination body return-type)
   `(stmt
-    (= "cpVect* r" "(cpVect*) dest")
+    (= ,(string-append return-type "* r")
+       ,(string-append "(" return-type"*) dest"))
     (= "*r" ,(spy 'actual-body= body))))
 
  ;; workaound to convert passing cpVect by value to passing cpVect by reference
@@ -102,9 +125,9 @@
 					  ;;  body: cast and deref al cpVect args
 					  ;; if a cpVect must be returned, assign the dest arg instead
 					  ,((if (vect-type? return-type)
-						wrap-destination
+						(lambda (x) (wrap-destination x (extract-type return-type)))
 						identity)
-					    (convert-body body args)))
+					    (convert-body body args (extract-type return-type))))
 
 				       rename)])
 
