@@ -4,14 +4,6 @@
 #include <chipmunk/chipmunk.h>
 <#
 
-(define-foreign-type cpVect "cpVect")
-
-(define-foreign-type cpVect* f64vector
-  (lambda (x)
-    (assert (= 2 (f64vector-length x)))
-    x))
-
-
 (define cpv* (foreign-lambda* void ( (f64vector dest) (float x) (float y))
 	      "cpVect* r = (cpVect*) dest;
                r->x = x;
@@ -34,45 +26,43 @@
  (import chicken matchable debug bind bind-translator)
  (import-for-syntax bind-translator matchable debug)
 					;(include "acorn-transformer.scm")
-
  (define (convert-arg-type type)
    (match type
      [('const c) `(const ,(convert-arg-type c)) ]
-     ["cpVect" 'f64vector;'(c-pointer "cpVect")		;`(c-pointer ,type )
-      ] ;; TODO convert to f64vector
-     [other other]
-     ))
+     ["cpVect" 'f64vector]
+     [('struct "cpVect") (convert-arg-type "cpVect")  ]
+     ["cpMat2x2" 'f64vector]
+     [other other]))
 
-(define (vect-type? arg-type)
-   (match arg-type
-     [('const c) (vect-type? c)]
-     ["cpVect" #t]
-     [other #f]))
+ (define (vect-type? arg-type)
+   ;; (spy 'vect-type? arg-type  '=?  (convert-arg-type arg-type))
+   (not (equal? arg-type
+		(convert-arg-type arg-type))))
 
  (define (vect-args? args.)
    (any vect-type? (map car args)))
 
  (define (convert-ret-type type)
-   (match type
-     [('const c) `(const ,(convert-arg-type c)) ]
-     ["cpVect" 'void]
-     [other other]))
+   (if (vect-type? type)
+       'void
+       type))
 
-(define (convert-args type-var-pairs add-destination)
-  (let ([converted-args (map (lambda (type-var)
-			       (list (convert-arg-type (car type-var))
-				     (cadr type-var)))
-			     type-var-pairs)])
-    (if add-destination
-	(cons '(f64vector dest) converted-args)
-	converted-args)))
+ (define (convert-args type-var-pairs add-destination)
+   (spy 'convert-args= type-var-pairs '=>
+	(let ([converted-args (map (lambda (type-var)
+				     (list (convert-arg-type (car type-var))
+					   (cadr type-var)))
+				   type-var-pairs)])
+	  (if add-destination
+	      (cons '(f64vector dest) converted-args)
+	      converted-args))))
 
 (define (spy . args)
    (pp args)
    (last args))
 
 (define (convert-body body args)
-  (let ([conv-args (apply append (map cdr (spy 'vect-args (filter (compose vect-type? car) args))))])
+  (let ([conv-args (spy 'conv-args= (apply append (map cdr (filter (compose vect-type? car) args))))])
     (let loop ([x body])
       (match x
 	[() '()]
@@ -90,67 +80,86 @@
  ;; workaound to convert passing cpVect by value to passing cpVect by reference
  (define (f64struct-arg-transformer x rename)
    (display " x --------\n")
-   (pp x)
+   (spy 'before= x)
    (display " rename --------\n")
-   (spy
+   (spy 'rename=
     (match x
       [(foreign-lambda* return-type args body)
+       (begin
+	 (spy 'body= body)
+	 (let* ([name (string->symbol (car body))]
 
-       (let* ([name (string->symbol (car body))]
+		[argnames (apply append (map cdr args))]
 
-	     [argnames (apply append (map cdr args))]
+		;; bind the foreign function with converted return type, args and body
+		[bound-foreign-lambda (bind-foreign-lambda*
 
-	     ;; bind the foreign function with converted return type, args and body
-	     [bound-foreign-lambda (bind-foreign-lambda*
+				       `(,foreign-lambda*
+					; return type : cpVect -> void
+					    ,(convert-ret-type return-type)
+					    ;; args: cpVect -> f64vector, prepend 'dest' arg if return type is cpVect
+					    ,(convert-args args (vect-type? return-type)) ; args
+					  ;;  body: cast and deref al cpVect args
+					  ;; if a cpVect must be returned, assign the dest arg instead
+					  ,((if (vect-type? return-type)
+						wrap-destination
+						identity)
+					    (convert-body body args)))
 
-				    `(,foreign-lambda*
-					 ; return type : cpVect -> void
-					 ,(convert-ret-type return-type)
-					 ;; args: cpVect -> f64vector, prepend 'dest' arg if return type is cpVect
-					 ,(convert-args args (vect-type? return-type)) ; args
-				       ;;  body: cast and deref al cpVect args
-				       ;; if a cpVect must be returned, assign the dest arg instead
-				       ,((if (vect-type? return-type)
-					     wrap-destination
-					     identity)
-					 (convert-body body args)))
+				       rename)])
 
-				    rename)])
+	   (if (vect-type? return-type)
+	       ;; wrap in a function that provides the 'dest' arg
+	       `(lambda ,argnames
+		  (,(rename 'let) ([dest (make-f64vector 2 0)])
+		   (,bound-foreign-lambda ,@(cons 'dest argnames))
+		   dest))
 
-	 (if (vect-type? return-type)
-	     ;; wrap in a function that provides the 'dest' arg
-	     `(lambda ,argnames
-		(,(rename 'let) ([dest (make-f64vector 2 0)])
-		 (,bound-foreign-lambda ,@(cons 'dest argnames))
-		 dest))
-
-	     bound-foreign-lambda))]
+	       bound-foreign-lambda)))]
       [other other]))))
 
-(bind-options default-renaming: "" foreign-transformer: f64struct-arg-transformer)
 
+(bind-include-path "./include")
 
-(define cpv+* (foreign-lambda* void ( (f64vector dest) (f64vector x) (f64vector y))
-	      "cpVect* r = (cpVect*) dest;
-               *r = cpvadd( *( (cpVect*) x) , *( (cpVect*) y) );
-"	      ))
+(bind-options ;default-renaming: ""
+	      foreign-transformer: f64struct-arg-transformer)
 
-
-(bind* "
-  typedef unsigned char cpBool;
-
-
-  static inline cpBool cpvnear1(const cpVect v1, const cpVect v2, const double dist)
-  {
-  	return cpvdistsq(v1, v2) < dist*dist;
-  }
-
-
-  static inline cpVect cpvadd1(const cpVect v1, const cpVect v2)
-  {
-  	return cpv(v1.x + v2.x, v1.y + v2.y);
-  }
+;; (bind* "
 
 
 
-  ")
+
+
+;;   static inline cpVect cpvadd1(const cpVect v1, const cpVect v2)
+;;   {
+;;   	return cpv(v1.x + v2.x, v1.y + v2.y);
+;;   }
+
+
+;; /// Convenience constructor for cpVect structs.
+;; static inline cpVect cpvX(const double x, const double y)
+;; {
+;; 	cpVect v = {x, y};
+;; 	return v;
+;; }
+
+;; static inline double cpvdotX(const cpVect v1, const cpVect v2)
+;; {
+;; 	return v1.x*v2.x + v1.y*v2.y;
+;; }
+
+;; static inline cpVect cpvperpX(const cpVect v)
+;; {
+;; 	return cpv(-v.y, v.x);
+;; }
+
+;;   ")
+
+
+;; (bind-file "include/chipmunk_types.h")
+; (bind-file "include/cpVect.h")
+
+(bind-file "include/cpv.h")
+
+(define x (cpv 1. 1.))
+(define y (cpv 1. 1.))
