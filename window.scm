@@ -6,8 +6,10 @@
      gl-utils
      srfi-18 ; threads
      srfi-42 ; eager comprehension
-     box
+     box ; mutable box
      nrepl)
+
+;(require-extension sequence-comprehensions)
 
 (define (range init limit #!optional [step 1])
   (if (>= init limit)
@@ -159,8 +161,6 @@ END
                          initial-elements: (0 1 2
 					      0 2 3))))
 
-(define program (make-box #f))
-(define program2 (make-box #f))
 
 (define (projection-matrix)
   (perspective 800 600 0.1 100 70))
@@ -183,11 +183,18 @@ END
 (define (model-matrix)
   (mat4-identity))
 
-(define shape (disk 100))
 
-(define (render-shape shape mvp)
+(define-record node
+  render-fn ; takes node , mvp ,
+)
+
+(define program (make-box #f))
+(define program2 (make-box #f))
+
+(define (render-shape shape program mvp)
+  (gl:use-program program)
   (gl:bind-vertex-array 0)
-  (gl:uniform-matrix4fv (gl:get-uniform-location (box-ref program) "MVP")
+  (gl:uniform-matrix4fv (gl:get-uniform-location program "MVP")
 			1 #f
 			mvp)
   (gl:bind-vertex-array (mesh-vao shape))
@@ -196,9 +203,14 @@ END
 				(type->gl (mesh-index-type shape))
 				#f 0))
 
+(define the-nodes
+  (box (list)))
+
+(define the-shape (disk 100))
+(define the-hex (disk 6))
 
 
-(define (render)
+(define (render nodes)
   (let ([mvp (m* (projection-matrix)
 		 (m* (view-matrix)
 		     (model-matrix)))]
@@ -209,19 +221,33 @@ END
 					    (* 2 (cos (box-ref r)))
 					    0))
 		   (m* (view-matrix)
+		       (model-matrix))))]
+	[mvp3 (m* (projection-matrix)
+		  (m*
+		   (translation (make-point (* 2 (cos (box-ref r)))
+					    (* 2 (sin (box-ref r)))
+					    0))
+		   (m* (view-matrix)
 		       (model-matrix))))])
     ;; shaders
-    (gl:use-program (box-ref program))
-    (render-shape shape mvp)
 
-    (gl:use-program (box-ref program2))
-    (render-shape shape mvp2)
+    (render-shape the-shape (box-ref program) mvp)
 
-    ;; draw shape
-    (gl:draw-elements-base-vertex (mode->gl (mesh-mode shape))
-    				  (mesh-n-indices shape)
-    				  (type->gl (mesh-index-type shape))
+
+    (render-shape the-shape  (box-ref program2) mvp2)
+;; ;
+
+    (for-each (lambda (node)
+		(let ([render-fn (node-render-fn node)])
+		  (render-fn node mvp3)))
+      nodes)
+
+        ;; draw shape
+    (gl:draw-elements-base-vertex (mode->gl (mesh-mode the-shape))
+    				  (mesh-n-indices the-shape)
+    				  (type->gl (mesh-index-type the-shape))
     				  #f 0)
+
 
     (check-error)))
 
@@ -248,20 +274,31 @@ END
 
    ;(set! repl-thread (thread-start! (make-thread repl)))
 
-
    (set-box! program (set-shaders! *vertex* *fragment*))
    (set-box! program2 (set-shaders! *vertex2* *fragment*))
 
    ;; create shape vertex array opbject
-   (mesh-make-vao! shape `((position . ,(gl:get-attrib-location
+   (mesh-make-vao! the-shape `((position . ,(gl:get-attrib-location
 					(box-ref program) "position"))
-			  (color . ,(gl:get-attrib-location
+			       (color . ,(gl:get-attrib-location
 				     (box-ref program) "color"))))
+
+   (box-swap! the-nodes (lambda [l]
+			  (cons
+			   (make-node (lambda (node mvp)
+					(gl:use-program (box-ref program))
+					(render-shape the-shape (box-ref program) mvp)
+					node;;
+					))
+			   l)))
+
 
    (let loop ([i 0])
      (glfw:swap-buffers (glfw:window))
      (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
-     (render)
+
+     (render (box-ref the-nodes))
+
      (glfw:poll-events) ; Because of the context version, initializing GLEW results in a harmless invalid enum
      (thread-yield!)
      (unless (glfw:window-should-close (glfw:window))
