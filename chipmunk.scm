@@ -5,7 +5,6 @@
 #include <chipmunk/chipmunk.h>
 <#
 
-
 (define type-size
   '(("cpVect" . 2)
     ("cpMat2x2" . 4)))
@@ -13,21 +12,14 @@
 (define cpv* (foreign-lambda* void ( (f64vector dest) (float x) (float y))
 	      "cpVect* r = (cpVect*) dest;
                r->x = x;
-               r->y = y;
-"	      ))
-
+               r->y = y;"))
 
 (define (cpv x y)
   (let ([ret (make-f64vector 2 0)])
     (cpv* ret x y)
     ret))
 
-(define (cpv+ x y)
-  (let ([ret (make-f64vector 2 0) ])
-    (cpv+* ret x y)
-    ret))
-
-
+;; binding transformer
 (begin-for-syntax
  (import chicken matchable debug bind bind-translator)
  (import-for-syntax bind-translator matchable debug)
@@ -51,7 +43,7 @@
    (not (equal? arg-type
 		(convert-arg-type arg-type))))
 
- (define (vect-args? args.)
+ (define (vect-args? args)
    (any vect-type? (map car args)))
 
  (define (convert-ret-type type)
@@ -90,11 +82,6 @@
 		    h)
 		(loop t))]))))
 
-;; (define cpv+* (foreign-lambda* void ( (f64vector dest) (f64vector x) (f64vector y))
-;; 	      "cpVect* r = (cpVect*) dest;
-;;                *r = cpvadd( *( (cpVect*) x) , *( (cpVect*) y) );"))
-
-
 (define (extract-type type)
   (match type
     [('struct x) (extract-type x)]
@@ -114,95 +101,87 @@
    (display " rename --------\n")
    (spy 'rename=
     (match x
-      [(foreign-lambda* return-type args body)
-       (begin
-	 (spy 'body= body)
-	 (let* ([name (string->symbol (car body))]
 
-		[argnames (apply append (map cdr args))]
+      ;; [(and form
+      ;; 	    (foreign-lambda* return-type args body)
+      ;; 	    (not (? vect-type? return-type))
+      ;; 	    (not (? vect-args? args)))
+      ;;  (spy 'form form)
+      ;;  (spy 'foreign
+      ;; 	    (bind-foreign-lambda*
+      ;; 	     `(foreign-lambda* ,return-type ,args ,body)
+      ;; 	     rename
+      ;; 	     ))]
 
-		;; bind the foreign function with converted return type, args and body
-		[bound-foreign-lambda (bind-foreign-lambda*
+      [(and form (foreign-lambda* return-type args body))
+       (let* ([name (string->symbol (car body))]
 
-				       `(,foreign-lambda*
+	      [rename- (lambda (x) (spy 'after (rename (spy 'before x))))]
+
+	      [argnames (apply append (map cdr args))]
+
+	      ;; bind the foreign function with converted return type, args and body
+	      [bound-foreign-lambda (bind-foreign-lambda*
+
+				     `(,foreign-lambda*
 					; return type : cpVect -> void
-					    ,(convert-ret-type return-type)
-					    ;; args: cpVect -> f64vector, prepend 'dest' arg if return type is cpVect
-					    ,(convert-args args (vect-type? return-type)) ; args
-					  ;;  body: cast and deref al cpVect args
-					  ;; if a cpVect must be returned, assign the dest arg instead
-					  ,((if (vect-type? return-type)
-						(lambda (x) (wrap-destination x (extract-type return-type)))
-						identity)
-					    (convert-body body args (extract-type return-type))))
+					  ,(convert-ret-type return-type)
+					  ;; args: cpVect -> f64vector, prepend 'dest' arg if return type is cpVect
+					  ,(convert-args args (vect-type? return-type)) ; args
+					;;  body: cast and deref al cpVect args
+					;; if a cpVect must be returned, assign the dest arg instead
+					,((if (vect-type? return-type)
+					      (lambda (x) (wrap-destination x (extract-type return-type)))
+					      identity)
+					  (convert-body body args (extract-type return-type))))
 
-				       rename)])
+				     rename-)])
+	 (if (vect-type? return-type)
+	     ;; wrap in a function that provides the 'dest' arg
+	     `(lambda ,argnames
+		(,(rename- 'let) ([dest (make-f64vector ,(match (spy (extract-type return-type))
+							  ["cpBB" 4]
+							  ["cpVect" 2]
+							  ["cpMat2x2" 4]
+							  ["cpTransform" 6]) 0)])
+		 (,bound-foreign-lambda ,@(cons 'dest argnames))
+		 dest))
+	     (if (vect-args? args)
+		 bound-foreign-lambda
+		 bound-foreign-lambda)))]
 
-	   (if (vect-type? return-type)
-	       ;; wrap in a function that provides the 'dest' arg
-	       `(lambda ,argnames
-		  (,(rename 'let) ([dest (make-f64vector ,(match (spy (extract-type return-type))
-							    ["cpBB" 4]
-							    ["cpVect" 2]
-							    ["cpMat2x2" 4]
-							    ["cpTransform" 6]) 0)])
-		   (,bound-foreign-lambda ,@(cons 'dest argnames))
-		   dest))
-	       bound-foreign-lambda
 
 
-	       )))]
       [other other]))))
 
-
+;; modified headers for compatibility with chicken bind
 (bind-include-path "./include")
 
-(bind-options default-renaming: ""
+;; TODO support binding of functions
+(bind-options ;default-renaming: ""
 	      foreign-transformer: f64struct-arg-transformer)
 
+;; testing:
 ;; (bind* "
 
 
-
-
-
-;;   static inline cpVect cpvadd1(const cpVect v1, const cpVect v2)
-;;   {
-;;   	return cpv(v1.x + v2.x, v1.y + v2.y);
-;;   }
-
-
-;; /// Convenience constructor for cpVect structs.
-;; static inline cpVect cpvX(const double x, const double y)
-;; {
-;; 	cpVect v = {x, y};
-;; 	return v;
-;; }
-
-;; static inline double cpvdotX(const cpVect v1, const cpVect v2)
-;; {
-;; 	return v1.x*v2.x + v1.y*v2.y;
-;; }
-
-;; static inline cpVect cpvperpX(const cpVect v)
-;; {
-;; 	return cpv(-v.y, v.x);
-;; }
-
 ;;   ")
-
 
 (bind-file "include/chipmunk_types.h")
 (bind-file "include/cpVect.h")
-;;(bind-file "include/cpBB.h")
+(bind-file "include/cpBB.h")
 
-;;(bind-file "include/cpSpatialIndex.h")
-;;(bind-file "include/cpTransform.h")
 
-;(bind-file "include/chipmunk.h")
+(bind-file "include/cpSpatialIndex.h")
+; (bind-file "include/cpTransform.h")
+
+;;(bind-file "include/chipmunk.h")
 
 (bind-file "include/cpArbiter.h")
-;(bind-file "include/cpConstraint.h")
+(bind-file "include/cpConstraint.h")
+
+
+
 
 (define x (cpv 1. 1.))
 (define y (cpv 1. 1.))
