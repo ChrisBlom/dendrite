@@ -174,11 +174,11 @@ typedef uint32_t cpCollisionID;
 
 // Oh C, how we love to define our own boolean types to get compiler compatibility
 /// Chipmunk's boolean type.
-#ifdef CP_BOOL_TYPE
-	typedef CP_BOOL_TYPE cpBool;
-#else
+//#ifdef CP_BOOL_TYPE
+//	typedef CP_BOOL_TYPE cpBool;
+//#else
 	typedef unsigned char cpBool;
-#endif
+//#endif
 
 #ifndef cpTrue
 /// true value.

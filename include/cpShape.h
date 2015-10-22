@@ -1,15 +1,15 @@
 /* Copyright (c) 2013 Scott Lembcke and Howling Moon Software
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -62,138 +62,138 @@ typedef struct cpShapeFilter {
 } cpShapeFilter;
 
 /// Collision filter value for a shape that will collide with anything except CP_SHAPE_FILTER_NONE.
-static const cpShapeFilter CP_SHAPE_FILTER_ALL = {CP_NO_GROUP, CP_ALL_CATEGORIES, CP_ALL_CATEGORIES};
+//////static const cpShapeFilter CP_SHAPE_FILTER_ALL = {CP_NO_GROUP, CP_ALL_CATEGORIES, CP_ALL_CATEGORIES};
 /// Collision filter value for a shape that does not collide with anything.
-static const cpShapeFilter CP_SHAPE_FILTER_NONE = {CP_NO_GROUP, ~CP_ALL_CATEGORIES, ~CP_ALL_CATEGORIES};
+//////static const cpShapeFilter CP_SHAPE_FILTER_NONE = {CP_NO_GROUP, ~CP_ALL_CATEGORIES, ~CP_ALL_CATEGORIES};
 
 /// Create a new collision filter.
-static inline cpShapeFilter
-cpShapeFilterNew(cpGroup group, cpBitmask categories, cpBitmask mask)
-{
-	cpShapeFilter filter = {group, categories, mask};
-	return filter;
-}
+//////static inline cpShapeFilter
+//////cpShapeFilterNew(cpGroup group, cpBitmask categories, cpBitmask mask)
+//////{
+//////	cpShapeFilter filter = {group, categories, mask};
+//////	return filter;
+//////}
 
 /// Destroy a shape.
-CP_EXPORT void cpShapeDestroy(cpShape *shape);
+void cpShapeDestroy(cpShape *shape);
 /// Destroy and Free a shape.
-CP_EXPORT void cpShapeFree(cpShape *shape);
+void cpShapeFree(cpShape *shape);
 
 /// Update, cache and return the bounding box of a shape based on the body it's attached to.
-CP_EXPORT cpBB cpShapeCacheBB(cpShape *shape);
+cpBB cpShapeCacheBB(cpShape *shape);
 /// Update, cache and return the bounding box of a shape with an explicit transformation.
-CP_EXPORT cpBB cpShapeUpdate(cpShape *shape, cpTransform transform);
+cpBB cpShapeUpdate(cpShape *shape, cpTransform transform);
 
 /// Perform a nearest point query. It finds the closest point on the surface of shape to a specific point.
 /// The value returned is the distance between the points. A negative distance means the point is inside the shape.
-CP_EXPORT cpFloat cpShapePointQuery(const cpShape *shape, cpVect p, cpPointQueryInfo *out);
+cpFloat cpShapePointQuery(const cpShape *shape, cpVect p, cpPointQueryInfo *out);
 
 /// Perform a segment query against a shape. @c info must be a pointer to a valid cpSegmentQueryInfo structure.
-CP_EXPORT cpBool cpShapeSegmentQuery(const cpShape *shape, cpVect a, cpVect b, cpFloat radius, cpSegmentQueryInfo *info);
+cpBool cpShapeSegmentQuery(const cpShape *shape, cpVect a, cpVect b, cpFloat radius, cpSegmentQueryInfo *info);
 
 /// Return contact information about two shapes.
-CP_EXPORT cpContactPointSet cpShapesCollide(const cpShape *a, const cpShape *b);
+//////cpContactPointSet cpShapesCollide(const cpShape *a, const cpShape *b);
 
 /// The cpSpace this body is added to.
-CP_EXPORT cpSpace* cpShapeGetSpace(const cpShape *shape);
+cpSpace* cpShapeGetSpace(const cpShape *shape);
 
 /// The cpBody this shape is connected to.
-CP_EXPORT cpBody* cpShapeGetBody(const cpShape *shape);
+cpBody* cpShapeGetBody(const cpShape *shape);
 /// Set the cpBody this shape is connected to.
 /// Can only be used if the shape is not currently added to a space.
-CP_EXPORT void cpShapeSetBody(cpShape *shape, cpBody *body);
+void cpShapeSetBody(cpShape *shape, cpBody *body);
 
 /// Get the mass of the shape if you are having Chipmunk calculate mass properties for you.
-CP_EXPORT cpFloat cpShapeGetMass(cpShape *shape);
+cpFloat cpShapeGetMass(cpShape *shape);
 /// Set the mass of this shape to have Chipmunk calculate mass properties for you.
-CP_EXPORT void cpShapeSetMass(cpShape *shape, cpFloat mass);
+void cpShapeSetMass(cpShape *shape, cpFloat mass);
 
 /// Get the density of the shape if you are having Chipmunk calculate mass properties for you.
-CP_EXPORT cpFloat cpShapeGetDensity(cpShape *shape);
+cpFloat cpShapeGetDensity(cpShape *shape);
 /// Set the density  of this shape to have Chipmunk calculate mass properties for you.
-CP_EXPORT void cpShapeSetDensity(cpShape *shape, cpFloat density);
+void cpShapeSetDensity(cpShape *shape, cpFloat density);
 
 /// Get the calculated moment of inertia for this shape.
-CP_EXPORT cpFloat cpShapeGetMoment(cpShape *shape);
+cpFloat cpShapeGetMoment(cpShape *shape);
 /// Get the calculated area of this shape.
-CP_EXPORT cpFloat cpShapeGetArea(cpShape *shape);
+cpFloat cpShapeGetArea(cpShape *shape);
 /// Get the centroid of this shape.
-CP_EXPORT cpVect cpShapeGetCenterOfGravity(cpShape *shape);
+cpVect cpShapeGetCenterOfGravity(cpShape *shape);
 
 /// Get the bounding box that contains the shape given it's current position and angle.
-CP_EXPORT cpBB cpShapeGetBB(const cpShape *shape);
+cpBB cpShapeGetBB(const cpShape *shape);
 
 /// Get if the shape is set to be a sensor or not.
-CP_EXPORT cpBool cpShapeGetSensor(const cpShape *shape);
+cpBool cpShapeGetSensor(const cpShape *shape);
 /// Set if the shape is a sensor or not.
-CP_EXPORT void cpShapeSetSensor(cpShape *shape, cpBool sensor);
+void cpShapeSetSensor(cpShape *shape, cpBool sensor);
 
 /// Get the elasticity of this shape.
-CP_EXPORT cpFloat cpShapeGetElasticity(const cpShape *shape);
+cpFloat cpShapeGetElasticity(const cpShape *shape);
 /// Set the elasticity of this shape.
-CP_EXPORT void cpShapeSetElasticity(cpShape *shape, cpFloat elasticity);
+void cpShapeSetElasticity(cpShape *shape, cpFloat elasticity);
 
 /// Get the friction of this shape.
-CP_EXPORT cpFloat cpShapeGetFriction(const cpShape *shape);
+cpFloat cpShapeGetFriction(const cpShape *shape);
 /// Set the friction of this shape.
-CP_EXPORT void cpShapeSetFriction(cpShape *shape, cpFloat friction);
+void cpShapeSetFriction(cpShape *shape, cpFloat friction);
 
 /// Get the surface velocity of this shape.
-CP_EXPORT cpVect cpShapeGetSurfaceVelocity(const cpShape *shape);
+cpVect cpShapeGetSurfaceVelocity(const cpShape *shape);
 /// Set the surface velocity of this shape.
-CP_EXPORT void cpShapeSetSurfaceVelocity(cpShape *shape, cpVect surfaceVelocity);
+void cpShapeSetSurfaceVelocity(cpShape *shape, cpVect surfaceVelocity);
 
 /// Get the user definable data pointer of this shape.
-CP_EXPORT cpDataPointer cpShapeGetUserData(const cpShape *shape);
+cpDataPointer cpShapeGetUserData(const cpShape *shape);
 /// Set the user definable data pointer of this shape.
-CP_EXPORT void cpShapeSetUserData(cpShape *shape, cpDataPointer userData);
+void cpShapeSetUserData(cpShape *shape, cpDataPointer userData);
 
 /// Set the collision type of this shape.
-CP_EXPORT cpCollisionType cpShapeGetCollisionType(const cpShape *shape);
+cpCollisionType cpShapeGetCollisionType(const cpShape *shape);
 /// Get the collision type of this shape.
-CP_EXPORT void cpShapeSetCollisionType(cpShape *shape, cpCollisionType collisionType);
+void cpShapeSetCollisionType(cpShape *shape, cpCollisionType collisionType);
 
 /// Get the collision filtering parameters of this shape.
-CP_EXPORT cpShapeFilter cpShapeGetFilter(const cpShape *shape);
+//// cpShapeFilter cpShapeGetFilter(const cpShape *shape);
 /// Set the collision filtering parameters of this shape.
-CP_EXPORT void cpShapeSetFilter(cpShape *shape, cpShapeFilter filter);
+//////void cpShapeSetFilter(cpShape *shape, cpShapeFilter filter);
 
 
 /// @}
 /// @defgroup cpCircleShape cpCircleShape
 
 /// Allocate a circle shape.
-CP_EXPORT cpCircleShape* cpCircleShapeAlloc(void);
+cpCircleShape* cpCircleShapeAlloc(void);
 /// Initialize a circle shape.
-CP_EXPORT cpCircleShape* cpCircleShapeInit(cpCircleShape *circle, cpBody *body, cpFloat radius, cpVect offset);
+cpCircleShape* cpCircleShapeInit(cpCircleShape *circle, cpBody *body, cpFloat radius, cpVect offset);
 /// Allocate and initialize a circle shape.
-CP_EXPORT cpShape* cpCircleShapeNew(cpBody *body, cpFloat radius, cpVect offset);
+cpShape* cpCircleShapeNew(cpBody *body, cpFloat radius, cpVect offset);
 
 /// Get the offset of a circle shape.
-CP_EXPORT cpVect cpCircleShapeGetOffset(const cpShape *shape);
+cpVect cpCircleShapeGetOffset(const cpShape *shape);
 /// Get the radius of a circle shape.
-CP_EXPORT cpFloat cpCircleShapeGetRadius(const cpShape *shape);
+cpFloat cpCircleShapeGetRadius(const cpShape *shape);
 
 /// @}
 /// @defgroup cpSegmentShape cpSegmentShape
 
 /// Allocate a segment shape.
-CP_EXPORT cpSegmentShape* cpSegmentShapeAlloc(void);
+cpSegmentShape* cpSegmentShapeAlloc(void);
 /// Initialize a segment shape.
-CP_EXPORT cpSegmentShape* cpSegmentShapeInit(cpSegmentShape *seg, cpBody *body, cpVect a, cpVect b, cpFloat radius);
+cpSegmentShape* cpSegmentShapeInit(cpSegmentShape *seg, cpBody *body, cpVect a, cpVect b, cpFloat radius);
 /// Allocate and initialize a segment shape.
-CP_EXPORT cpShape* cpSegmentShapeNew(cpBody *body, cpVect a, cpVect b, cpFloat radius);
+cpShape* cpSegmentShapeNew(cpBody *body, cpVect a, cpVect b, cpFloat radius);
 
 /// Let Chipmunk know about the geometry of adjacent segments to avoid colliding with endcaps.
-CP_EXPORT void cpSegmentShapeSetNeighbors(cpShape *shape, cpVect prev, cpVect next);
+void cpSegmentShapeSetNeighbors(cpShape *shape, cpVect prev, cpVect next);
 
 /// Get the first endpoint of a segment shape.
-CP_EXPORT cpVect cpSegmentShapeGetA(const cpShape *shape);
+cpVect cpSegmentShapeGetA(const cpShape *shape);
 /// Get the second endpoint of a segment shape.
-CP_EXPORT cpVect cpSegmentShapeGetB(const cpShape *shape);
+cpVect cpSegmentShapeGetB(const cpShape *shape);
 /// Get the normal of a segment shape.
-CP_EXPORT cpVect cpSegmentShapeGetNormal(const cpShape *shape);
+cpVect cpSegmentShapeGetNormal(const cpShape *shape);
 /// Get the first endpoint of a segment shape.
-CP_EXPORT cpFloat cpSegmentShapeGetRadius(const cpShape *shape);
+cpFloat cpSegmentShapeGetRadius(const cpShape *shape);
 
 /// @}
