@@ -23,7 +23,21 @@
 (begin-for-syntax
  (import chicken matchable debug bind bind-translator)
  (import-for-syntax bind-translator matchable debug)
-					;(include "acorn-transformer.scm")
+
+ (define (extract-type type)
+   (match type
+     [('struct x) (extract-type x)]
+     [('const x) (extract-type x)]
+     [other other]))
+
+ (define (map-type f type)
+   (match type
+     [('const c) `(const ,(map-type f c))]
+     [('struct c) `(struct ,(map-type f c))]
+     [atomic (f atomic)]))
+
+ ; (extract-type '(struct (const "cpVect")))
+
  (define (convert-arg-type type)
    (match type
      [('const c) `(const ,(convert-arg-type c)) ]
@@ -38,18 +52,39 @@
 ;     ["cpContactPointSet" '(pointer cpContactPointSet)]		;
      [other other]))
 
- (define (vect-type? arg-type)
-   ;; (spy 'vect-type? arg-type  '=?  (convert-arg-type arg-type))
-   (not (equal? arg-type
-		(convert-arg-type arg-type))))
+ (define (convert-arg-type? type)
+   (match type
+     [('const c) (convert-arg-type? c) ]
+     [('struct x) (convert-arg-type? x )  ]
+     ["cpVect" #t]
+     ["cpBB" #t]
+     ["cpTransform" #t]
+     ["cpMat2x2" #t]
+     ["uintptr_t" #t]
+     [other #f]))
 
- (define (vect-args? args)
-   (any vect-type? (map car args)))
+ (define (convert-return-type? type)
+   (match type
+     [('const c) (convert-return-type? c) ]
+     [('struct x) (convert-return-type? x)  ]
+     ["cpVect" #t]
+     ["cpBB" #t]
+     ["cpTransform" #t]
+     ["cpMat2x2" #t]
+     ["uintptr_t" #f] ;; <-
+     [other #f]))
+
+ ; (convert-return-type? '(struct "cpTransform"))
+
+ (define (convert-args? args)
+   (any convert-arg-type? (map car args)))
 
  (define (convert-ret-type type)
-   (if (vect-type? type)
-       'void
-       type))
+   (spy 'CONVERT-RET-TYPE type
+	(match (extract-type (convert-arg-type type))
+	  ['f64vector 'void]
+	  ["uintptr_t" 'long]
+	  [other other])))
 
  (define (convert-args type-var-pairs add-destination)
    (spy 'convert-args= type-var-pairs '=>
@@ -61,19 +96,19 @@
 	      (cons '(f64vector dest) converted-args)
 	      converted-args))))
 
-(define (spy . args)
+ (define (spy . args)
    (pp args)
    (last args))
 
-(define (convert-body body args return-type)
-  (let ([conv-args (apply append (map cdr (filter (compose vect-type? car) args)))]
-	[arg->type (fold (lambda (arg-pair acc)
-			     (let* ([var (second arg-pair)]
-				    [type (extract-type (first arg-pair))])
-			       (alist-cons var type acc)))
-			   '()
+ (define (convert-body body args return-type)
+   (let ([conv-args (apply append (map cdr (filter (compose convert-arg-type? car) args)))]
+	 [arg->type (fold (lambda (arg-pair acc)
+			    (let* ([var (second arg-pair)]
+				   [type (extract-type (first arg-pair))])
+			      (alist-cons var type acc)))
+			  '()
 			   args)])
-    (let loop ([x body])
+     (let loop ([x body])
       (match x
 	[() '()]
 	[ (h . t)
@@ -82,77 +117,73 @@
 		    h)
 		(loop t))]))))
 
-(define (extract-type type)
-  (match type
-    [('struct x) (extract-type x)]
-    [('const x) (extract-type x)]
-    [other other]))
 
-(define (wrap-destination body return-type)
-  `(stmt
-    (= ,(string-append return-type "* r_")
-       ,(string-append "(" return-type"*) dest"))
-    (= "*r_" ,body )))
+ (define (wrap-destination body return-type)
+   `(stmt
+     (= ,(string-append return-type "* r_")
+	,(string-append "(" return-type"*) dest"))
+     (= "*r_" ,body )))
+
+ (define (convert? args ret)
+   (or (convert-return-type? ret)
+       (convert-args? args)))
 
  ;; workaound to convert passing cpVect by value to passing cpVect by reference
  (define (f64struct-arg-transformer x rename)
-   (display " x --------\n")
+   (display "================================================================================")
    (spy 'before= x)
-   (display " rename --------\n")
-   (spy 'rename=
-    (match x
+   (display "--\n")
+   (match x
 
-      ;; [(and form
-      ;; 	    (foreign-lambda* return-type args body)
-      ;; 	    (not (? vect-type? return-type))
-      ;; 	    (not (? vect-args? args)))
-      ;;  (spy 'form form)
-      ;;  (spy 'foreign
-      ;; 	    (bind-foreign-lambda*
-      ;; 	     `(foreign-lambda* ,return-type ,args ,body)
-      ;; 	     rename
-      ;; 	     ))]
+     ;; [(and form
+     ;; 	    (foreign-lambda* return-type args body)
+     ;; 	    (not (? vect-type? return-type))
+     ;; 	    (not (? vect-args? args)))
+     ;;  (spy 'form form)
+     ;;  (spy 'foreign
+     ;; 	    (bind-foreign-lambda*
+     ;; 	     `(foreign-lambda* ,return-type ,args ,body)
+     ;; 	     rename
+     ;; 	     ))]
 
-      [(and form (foreign-lambda* return-type args body))
-       (let* ([name (string->symbol (car body))]
+     [(and form (foreign-lambda* return-type args body))
+      (let* ([name (string->symbol (car body))]
 
-	      [rename- (lambda (x) (spy 'after (rename (spy 'before x))))]
+	     [argnames (apply append (map cdr args))]
 
-	      [argnames (apply append (map cdr args))]
+	     ;; bind the foreign function with converted return type, args and body
+	     [bound-foreign-lambda (bind-foreign-lambda*
 
-	      ;; bind the foreign function with converted return type, args and body
-	      [bound-foreign-lambda (bind-foreign-lambda*
-
-				     `(,foreign-lambda*
+				    `(,foreign-lambda*
 					; return type : cpVect -> void
-					  ,(convert-ret-type return-type)
-					  ;; args: cpVect -> f64vector, prepend 'dest' arg if return type is cpVect
-					  ,(convert-args args (vect-type? return-type)) ; args
-					;;  body: cast and deref al cpVect args
-					;; if a cpVect must be returned, assign the dest arg instead
-					,((if (vect-type? return-type)
-					      (lambda (x) (wrap-destination x (extract-type return-type)))
-					      identity)
-					  (convert-body body args (extract-type return-type))))
+					 ,(spy 'CONVERT-RET-TYPE return-type (convert-ret-type return-type))
+					 ;; args: cpVect -> f64vector, prepend 'dest' arg if return type is cpVect
+					 ,(convert-args args (convert-return-type? return-type)) ; args
+				       ;;  body: cast and deref al cpVect args
+				       ;; if a cpVect must be returned, assign the dest arg instead
+				       ,((if (convert-return-type? return-type)
+					     (lambda (x) (wrap-destination x (extract-type return-type)))
+					     identity)
+					 (convert-body body args (extract-type return-type))))
 
-				     rename-)])
-	 (if (vect-type? return-type)
-	     ;; wrap in a function that provides the 'dest' arg
-	     `(lambda ,argnames
-		(,(rename- 'let) ([dest (make-f64vector ,(match (spy (extract-type return-type))
-							  ["cpBB" 4]
-							  ["cpVect" 2]
-							  ["cpMat2x2" 4]
-							  ["cpTransform" 6]) 0)])
-		 (,bound-foreign-lambda ,@(cons 'dest argnames))
-		 dest))
-	     (if (vect-args? args)
-		 bound-foreign-lambda
-		 bound-foreign-lambda)))]
+				    rename)])
+	(spy 'AFTER=
+	     (if (convert-return-type? return-type)
+		 ;; wrap in a function that provides the 'dest' arg
+		 `(lambda ,argnames
+		    (,(rename 'let) ([dest (make-f64vector ,(match (spy 'EXTRACT-TYPE return-type (extract-type return-type))
+							      ["cpBB" 4]
+							      ["cpVect" 2]
+							      ["cpMat2x2" 4]
+							      ["cpTransform" 6]) 0)])
+		     (,bound-foreign-lambda ,@(cons 'dest argnames))
+		     dest))
+		 (if (convert-args? args)
+		     bound-foreign-lambda
+		     bound-foreign-lambda))))]
 
-
-
-      [other other]))))
+;     [other (bind-foreign-lambda* other rename)]
+     )))
 
 ;; modified headers for compatibility with chicken bind
 (bind-include-path "./include")
@@ -168,20 +199,14 @@
 ;;   ")
 
 (bind-file "include/chipmunk_types.h")
+
 (bind-file "include/cpVect.h")
 (bind-file "include/cpBB.h")
-
-
 (bind-file "include/cpSpatialIndex.h")
-; (bind-file "include/cpTransform.h")
-
-;;(bind-file "include/chipmunk.h")
-
+(bind-file "include/cpTransform.h")
 (bind-file "include/cpArbiter.h")
 (bind-file "include/cpConstraint.h")
+(bind-file "include/cpShape.h")
+(bind-file "include/cpSpace.h")
 
-
-
-
-(define x (cpv 1. 1.))
-(define y (cpv 1. 1.))
+;(bind-file "include/chipmunk.h")
