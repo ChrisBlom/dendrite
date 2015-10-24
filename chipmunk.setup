@@ -3,7 +3,7 @@
 (compile -s
 	 -I./Chipmunk2D/include/chipmunk
 	 ./Chipmunk2D/src/*.c
-	 chipmunk.scm
+	 chipmunk.scd
 	 -C --std=gnu99
 	 -C -DCP_PI=3.14159265358979323846264338327950288
          -J

@@ -1,23 +1,14 @@
-(import chicken bind)
+(import chicken bind foreign srfi-4)
 
-#>
-#include <chipmunk/chipmunk_private.h>
-#include <chipmunk/chipmunk.h>
-<#
+(include "struct-by-value-transformer.scm")
 
-;; binding transformer
-(define transformer (parameter #f))
-
-
-(begin-for-syntax
- (import chicken scheme)
- (include "struct-by-value-transformer.scm"))
+;; dummy declaration to avoid unbound identifier error
+(define struct-by-value-transformer #f)
 
 ;; these headers are modified for compatibility with chicken bind
 (bind-include-path "./include")
 
-;; (bind-rename/pattern "^cp" "")
-;; (bind-rename/pattern "make-cp" "make")
+(bind-rename/pattern "^cp" "")
 
 (bind-options default-renaming: ""
 	      foreign-transformer: struct-by-value-transformer)

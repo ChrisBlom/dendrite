@@ -1,5 +1,7 @@
-(import chicken scheme matchable bind-translator)
 (import-for-syntax bind-translator matchable)
+(begin-for-syntax
+ (import chicken scheme matchable bind-translator foreign)
+
 
 (define (extract-type type)
   (match type
@@ -68,7 +70,8 @@
 ;; workaround to adapt functions that pass by value
 ;; Chicken Scheme cannot bind function that receive structs by value,
 ;; as a workaround we pass f64vector instead and replaces all uses with derefences
-(define (struct-by-value-transformer foreign rename)
+(define struct-by-value-transformer (void))
+(define-for-syntax (chipmunk#struct-by-value-transformer foreign rename)
   (match foreign
     [(foreign-lambda* return-type args body)
      (if (returns-struct-by-value? return-type)
@@ -109,4 +112,4 @@
 	       ,(convert-ret-type return-type)
 	       ,(convert-args args)
 	     ,(convert-body body args))
-	  rename))]))
+	  rename))])))
