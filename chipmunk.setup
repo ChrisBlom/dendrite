@@ -1,0 +1,16 @@
+;; -*- scheme -*-
+
+(compile -s
+	 -I./Chipmunk2D/include/chipmunk
+	 ./Chipmunk2D/src/*.c
+	 chipmunk.scm
+	 -C --std=gnu99
+	 -C -DCP_PI=3.14159265358979323846264338327950288
+         -J
+	 )
+
+;(compile -s chipmunk.import.scm)
+
+(install-extension 'chipmunk
+                   '("chipmunk.so"; "chipmunk.import.so"
+		     ))
