@@ -2,12 +2,72 @@
 
 (use (prefix glfw3 glfw:)
      (prefix opengl-glew gl:)
+     (prefix chipmunk cp-)
      gl-math
      gl-utils
+     srfi-4 ; vectors
      srfi-18 ; threads
      srfi-42 ; eager comprehension
      box ; mutable box
      nrepl)
+
+(define the-space (cp-space-new))
+
+(cp-space-set-gravity the-space (cp-v 0. -9.8))
+
+(define-record node
+  render-fn ; takes node , mvp ,
+)
+
+(define (add-ball space x y)
+  (let* ((radius 0.45)
+	 (mass 1.)
+         (moment (cp-moment-for-circle mass 0. radius cp-vzero))
+	 (body (cp-space-add-body space (cp-body-new  mass moment)))
+	 (shape (cp-space-add-shape space (cp-circle-shape-new body radius cp-vzero))))
+    (cp-shape-set-friction shape 0.7)
+    (cp-shape-set-elasticity shape 0.95)
+    (cp-body-set-position body (cp-v (exact->inexact x)
+				     (exact->inexact y)))
+    (list body shape)))
+
+(define (add-segment space from to)
+  (let ([shape (cp-segment-shape-new
+		(cp-space-get-static-body space)
+		from
+		to
+		0.)])
+    (cp-space-add-shape space shape)
+    shape))
+
+(define (add-shape space shape #!key elasticity)
+  (cp-space-add-shape space shape))
+
+(define the-ball
+  (add-ball the-space 1. 2.))
+
+(define (v.x cpv)
+  (f64vector-ref cpv 0))
+
+(define (v.y cpv)
+  (f64vector-ref cpv 1))
+
+(v.x (cp-body-get-position (car the-ball))) 1
+
+;; -1 -1  ------- +1 +1
+;;
+;;
+;; -1 -1 ------- +1 -1
+
+(cp-shape-set-elasticity (add-segment the-space (cp-v -5. -5.) (cp-v -5. +5.))
+			 0.95)
+(cp-shape-set-elasticity (add-segment the-space (cp-v -5. +5.) (cp-v +5. +5.))
+			 0.95)
+(cp-shape-set-elasticity (add-segment the-space (cp-v +5. +5.) (cp-v +5. -5.))
+			 0.95)
+(cp-shape-set-elasticity (add-segment the-space (cp-v +5. -5.) (cp-v -5. -5.))
+			 0.95)
+
 
 ;(require-extension sequence-comprehensions)
 
@@ -184,9 +244,6 @@ END
   (mat4-identity))
 
 
-(define-record node
-  render-fn ; takes node , mvp ,
-)
 
 (define program (make-box #f))
 (define program2 (make-box #f))
@@ -224,9 +281,10 @@ END
 		       (model-matrix))))]
 	[mvp3 (m* (projection-matrix)
 		  (m*
-		   (translation (make-point (* 2 (cos (box-ref r)))
-					    (* 2 (sin (box-ref r)))
-					    0))
+		   (translation (let ([body-pos (cp-body-get-position (car the-ball))])
+				  (make-point (v.x body-pos)
+					      (v.y body-pos)
+					      0)))
 		   (m* (view-matrix)
 		       (model-matrix))))])
     ;; shaders
@@ -294,11 +352,10 @@ END
 
 
    (let loop ([i 0])
+     (cp-space-step the-space 1/60 ) ;; TODO use delta time
      (glfw:swap-buffers (glfw:window))
      (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
-
      (render (box-ref the-nodes))
-
      (glfw:poll-events) ; Because of the context version, initializing GLEW results in a harmless invalid enum
      (thread-yield!)
      (unless (glfw:window-should-close (glfw:window))
