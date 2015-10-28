@@ -9,18 +9,21 @@
      srfi-18 ; threads
      srfi-42 ; eager comprehension
      box ; mutable box
-     nrepl)
+     nrepl
+     clojurian-syntax)
+
+;; TODO perform physics in a separate thread
 
 (define the-space (cp-space-new))
 
-(cp-space-set-gravity the-space (cp-v 0. -9.8))
+(cp-space-set-gravity the-space (cp-v 0. -0.98))
 
 (define-record node
   render-fn ; takes node , mvp ,
 )
 
 (define (add-ball space x y)
-  (let* ((radius 0.45)
+  (let* ((radius 0.2)
 	 (mass 1.)
          (moment (cp-moment-for-circle mass 0. radius cp-vzero))
 	 (body (cp-space-add-body space (cp-body-new  mass moment)))
@@ -29,22 +32,13 @@
     (cp-shape-set-elasticity shape 0.95)
     (cp-body-set-position body (cp-v (exact->inexact x)
 				     (exact->inexact y)))
-    (list body shape)))
+    (list
+     (cons 'body  body)
+     (cons 'shape shape))))
 
-(define (add-segment space from to)
-  (let ([shape (cp-segment-shape-new
-		(cp-space-get-static-body space)
-		from
-		to
-		0.)])
-    (cp-space-add-shape space shape)
-    shape))
-
-(define (add-shape space shape #!key elasticity)
-  (cp-space-add-shape space shape))
-
-(define the-ball
-  (add-ball the-space 1. 2.))
+(define (fixed-line-segment space from to)
+  (let ([radius 0.1])
+    (cp-segment-shape-new (cp-space-get-static-body space) from to radius)))
 
 (define (v.x cpv)
   (f64vector-ref cpv 0))
@@ -52,29 +46,38 @@
 (define (v.y cpv)
   (f64vector-ref cpv 1))
 
-(v.x (cp-body-get-position (car the-ball))) 1
-
 ;; -1 -1  ------- +1 +1
 ;;
 ;;
 ;; -1 -1 ------- +1 -1
-
-(cp-shape-set-elasticity (add-segment the-space (cp-v -5. -5.) (cp-v -5. +5.))
-			 0.95)
-(cp-shape-set-elasticity (add-segment the-space (cp-v -5. +5.) (cp-v +5. +5.))
-			 0.95)
-(cp-shape-set-elasticity (add-segment the-space (cp-v +5. +5.) (cp-v +5. -5.))
-			 0.95)
-(cp-shape-set-elasticity (add-segment the-space (cp-v +5. -5.) (cp-v -5. -5.))
-			 0.95)
-
-
-;(require-extension sequence-comprehensions)
+(cp-space-add-shape the-space
+		    (doto (fixed-line-segment the-space (cp-v -5. -5.) (cp-v -5. +5.))
+			  (cp-shape-set-elasticity 0.95)))
+(cp-space-add-shape the-space
+		    (doto (fixed-line-segment the-space (cp-v -5. +5.) (cp-v +5. +5.))
+			  (cp-shape-set-elasticity 0.95)))
+(cp-space-add-shape the-space
+		    (doto (fixed-line-segment the-space (cp-v +5. +5.) (cp-v +5. -5.))
+			  (cp-shape-set-elasticity 0.95)))
+(cp-space-add-shape the-space
+		    (doto (fixed-line-segment the-space (cp-v +5. -5.) (cp-v -5. -5.))
+			  (cp-shape-set-elasticity 0.95)))
 
 (define (range init limit #!optional [step 1])
   (if (>= init limit)
       '()
       (cons init (range (+ init step) limit step ))))
+
+(define the-balls (box (let ([n 30])
+			 (map (lambda (i)
+				(let ([angle (/ (* pi 2 i) n)]
+				      [radius 2])
+				  (add-ball the-space
+					    (* radius (sin angle))
+					    (* radius (cos angle)))))
+			      (range 0 n)))))
+
+
 
 (define (inc i) (+ 1 i))
 
@@ -109,7 +112,7 @@ void main(){
    float d = sqrt ( (position.x * position.x) + (position.y * position.y) ) ;
    float r = atan(position.x , position.y);
    float v = 1.0 - d;
-   c = vec3(v+ sin(r*20),v,v)		;
+   c = vec3(v+ sin(r*8),v,v)		;
 }
 END
 )
@@ -128,8 +131,10 @@ END
 (define (circle-positions n)
   (apply append (cons '(0 0)
 		      (map (lambda (i)
-			     (let ([angle (/ (* pi 2 i) n)])
-			       (list (sin angle) (cos angle))))
+			     (let ([angle (/ (* pi 2 i) n)]
+				   [radius 0.2])
+			       (list (* radius (sin angle))
+				     (* radius (cos angle)))))
 			   (range 0 n)))))
 
 (define (circle-colors n)
@@ -231,7 +236,7 @@ END
 (define (eye)
   (make-point 0 ;(* (box-ref d) (sin (box-ref r)))
 	      0
-	      10; (* (box-ref d) (cos (box-ref r)))
+	      7; (* (box-ref d) (cos (box-ref r)))
 	      ))
 
 (define (view-matrix)
@@ -242,8 +247,6 @@ END
 
 (define (model-matrix)
   (mat4-identity))
-
-
 
 (define program (make-box #f))
 (define program2 (make-box #f))
@@ -266,38 +269,22 @@ END
 (define the-shape (disk 100))
 (define the-hex (disk 6))
 
+(define (for-each-indexed f elems)
+  (define i 0)
+  (for-each (lambda (x)
+	      (f i x)
+	      (set! i (+ i 1)))  elems))
 
 (define (render nodes)
   (let ([mvp (m* (projection-matrix)
 		 (m* (view-matrix)
 		     (model-matrix)))]
-
-	[mvp2 (m* (projection-matrix)
-		  (m*
-		   (translation (make-point (* 2 (sin (box-ref r)))
-					    (* 2 (cos (box-ref r)))
-					    0))
-		   (m* (view-matrix)
-		       (model-matrix))))]
-	[mvp3 (m* (projection-matrix)
-		  (m*
-		   (translation (let ([body-pos (cp-body-get-position (car the-ball))])
-				  (make-point (v.x body-pos)
-					      (v.y body-pos)
-					      0)))
-		   (m* (view-matrix)
-		       (model-matrix))))])
+)
     ;; shaders
-
-    (render-shape the-shape (box-ref program) mvp)
-
-
-    (render-shape the-shape  (box-ref program2) mvp2)
-;; ;
 
     (for-each (lambda (node)
 		(let ([render-fn (node-render-fn node)])
-		  (render-fn node mvp3)))
+		  (render-fn node mvp)))
       nodes)
 
         ;; draw shape
@@ -306,13 +293,30 @@ END
     				  (type->gl (mesh-index-type the-shape))
     				  #f 0)
 
-
     (check-error)))
 
 (glfw:key-callback (lambda (window key scancode action mods)
                      (cond
                       [(and (eq? key glfw:+key-escape+) (eq? action glfw:+press+))
                        (glfw:set-window-should-close window #t)])))
+
+(define (ball->node idx ball)
+  (let ([body (alist-ref 'body ball)]
+	[programs (vector program program2)])
+    (make-node
+     ;;
+     (lambda (node mvp)
+       ;(gl:use-program (box-ref program))
+       (render-shape the-shape
+		     (box-ref (vector-ref programs (modulo idx 2)))
+		     (m* (projection-matrix)
+			 (m*
+			  (translation (let ([body-pos (cp-body-get-position body)])
+					 (make-point (v.x body-pos)
+						     (- (v.y body-pos))
+						     0)))
+			  (m* (view-matrix)
+			      (model-matrix)))))))))
 
 (define (set-shaders! vertex-string fragment-string)
   (let ([vertex-shader-id   (make-shader gl:+vertex-shader+ vertex-string)]
@@ -341,16 +345,6 @@ END
 			       (color . ,(gl:get-attrib-location
 				     (box-ref program) "color"))))
 
-   (box-swap! the-nodes (lambda [l]
-			  (cons
-			   (make-node (lambda (node mvp)
-					(gl:use-program (box-ref program))
-					(render-shape the-shape (box-ref program) mvp)
-					node;;
-					))
-			   l)))
-
-
    (let loop ([i 0])
      (cp-space-step the-space 1/60 ) ;; TODO use delta time
      (glfw:swap-buffers (glfw:window))
@@ -366,14 +360,28 @@ END
 ;;(use nrepl)
 ;(define nrepl-thread (thread-start! (lambda () (nrepl 1234))))
 
-(define main-thread (thread-start! (make-thread main)))
+;(define main-thread (thread-start! (make-thread main)))
 
-(define repl-thread (thread-start! (make-thread repl)))
+;(define repl-thread (thread-start! (make-thread repl)))
 
 (define (ch)
   (use box)
   (set-box! program (set-shaders! *vertex2* *fragment*)))
 
-(thread-join! main-thread)
+(define (map-indexed f elems)
+  (let loop ([i 0]
+	     [todo elems])
+    (if (eq? '() todo)
+	'()
+	(cons (f i (car todo))
+	      (loop (+ i 1) (cdr todo))))))
+
+(box-swap! the-nodes
+	   append
+	   (map-indexed ball->node (box-ref the-balls)))
+
+
+;(thread-join! main-thread)
+(main)
 
 ;; run (use box) again in the repl
