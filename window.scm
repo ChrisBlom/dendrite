@@ -134,7 +134,6 @@ END
   (alist-ref 'body (first (unbox the-balls)))
   (alist-ref 'body (second (unbox the-balls)))))
 
-
 ;;;;; Graphics ;;;;;
 
 (use posix)
@@ -162,8 +161,31 @@ END
 	 (loop newtime)))))
   stop)
 
+(define (watched-slurp file on-change)
+  (let ([active (box #t)]
+	[box-val (box (read-all file))])
+    (thread-start!
+     (lambda () (let loop ([filetime (file-modification-time file)])
+	     ;; ;(display "Polling ") (display file) (newline)
+	     (let ([newtime (file-modification-time file)])
+	       (when (not (equal? filetime newtime))
+		 (handle-exceptions e (lambda (e) (display e) (newline e))
+		   (let ([new-value (read-all file)])
+		     (display "Updated: ") (display file) (newline)
+		     (box-set! box-val new-value)
+		     (on-change file new-value))))
+	       (thread-sleep! 1)
+	       (loop newtime)))))))
+
+(define v1 (box (read-all "vertex-shaders/v1.glsl")))
 (define v2 (box (read-all "vertex-shaders/v2.glsl")))
-(define v3 (box (read-all "vertex-shaders/v1.glsl")))
+(define v3 (box (read-all "vertex-shaders/v3.glsl")))
+
+(define v4 (watched-slurp "vertex-shaders/v1.glsl"
+			  (lambda (file string)
+			    (display "Updated ")
+			    (display file)
+			    (newline))))
 
 
 ;(watcher)
@@ -419,7 +441,7 @@ END
    ;(set! repl-thread (thread-start! (make-thread repl)))
 
    (set-box! program (set-shaders! *vertex* *fragment*))
-   (set-box! program2 (set-shaders! *vertex2* *fragment*))
+   (set-box! program2 (set-shaders! (unbox v2) *fragment*))
    (set-box! program3 (set-shaders! (unbox v3) *fragment*))
 
    ;; create shape vertex array opbject
@@ -463,17 +485,26 @@ END
 			       (lambda (f)
 				 (when f
 				   (display "Updated") (display f) (newline)
-				   (box-set! v3 (read-all f))
-				   (set-box! program3 (set-shaders! (read-all f) *fragment*))
+				   (box-set! v1 (read-all f))
+				   (set-box! program (set-shaders! (read-all f) *fragment*))
 				   (read-all f)
 				   (newline)))))
 
-(define watcher-1 (watch-reload! "vertex-shaders/v2.glsl"
+(define watcher-2 (watch-reload! "vertex-shaders/v2.glsl"
 			       (lambda (f)
 				 (when f
 				   (display "Updated") (display f) (newline)
 				   (box-set! v2 (read-all f))
 				   (set-box! program2 (set-shaders! (read-all f) *fragment*))
+				   (read-all f)
+				   (newline)))))
+
+(define watcher-3 (watch-reload! "vertex-shaders/v3.glsl"
+			       (lambda (f)
+				 (when f
+				   (display "Updated") (display f) (newline)
+				   (box-set! v3 (read-all f))
+				   (set-box! program3 (set-shaders! (read-all f) *fragment*))
 				   (read-all f)
 				   (newline)))))
 
