@@ -12,7 +12,8 @@
      box ; mutable box
      nrepl
      clojurian-syntax
-     prepl)
+     prepl
+     utils)
 
 (define REPL (make-prepl 1111))
 
@@ -151,15 +152,17 @@ END
   (thread-start!
    (lambda ()
      (let loop ((filetime '()))
-       (display "Polling ") (display file) (newline)
+       ;(display "Polling ") (display file) (newline)
        (let ((newtime (get-time)))
 	 (when (not (equal? filetime newtime))
 	   (handle-exceptions e (lambda (e) (display e))
+	     (display "Updated: ") (display file) (newline)
 	     (on-change file)))
 	 (tsleep 1)
 	 (loop newtime)))))
   stop)
 
+(define v2 (box (read-all "vertex-shaders/v2.glsl")))
 (define v3 (box (read-all "vertex-shaders/v1.glsl")))
 
 
@@ -325,9 +328,16 @@ END
 (define program2 (make-box #f))
 (define program3 (make-box #f))
 
+
+
 (define (render-shape shape program mvp)
   (gl:use-program program)
   (gl:bind-vertex-array 0)
+  (let ([id (gl:get-uniform-location program "ENERGY")])
+    (when (> id -1)
+      (gl:uniform1f id (sin (time->seconds (current-time))))))
+
+  ;; set MVP
   (gl:uniform-matrix4fv (gl:get-uniform-location program "MVP")
 			1 #f
 			mvp)
@@ -449,7 +459,7 @@ END
 
 
 
-(define watcher (watch-reload! "vertex-shaders/v1.glsl"
+(define watcher-1 (watch-reload! "vertex-shaders/v1.glsl"
 			       (lambda (f)
 				 (when f
 				   (display "Updated") (display f) (newline)
@@ -458,9 +468,18 @@ END
 				   (read-all f)
 				   (newline)))))
 
-(thread-join! main-thread)
-;(main)
+(define watcher-1 (watch-reload! "vertex-shaders/v2.glsl"
+			       (lambda (f)
+				 (when f
+				   (display "Updated") (display f) (newline)
+				   (box-set! v2 (read-all f))
+				   (set-box! program2 (set-shaders! (read-all f) *fragment*))
+				   (read-all f)
+				   (newline)))))
 
+;(thread-join! main-thread)
+;(main)
+(repl)
 
 
 ;; run (use box) again in the repl
