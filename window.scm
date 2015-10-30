@@ -2,6 +2,7 @@
 
 (use (prefix glfw3 glfw:)
      (prefix opengl-glew gl:)
+     (prefix gl opengl:)
      (prefix chipmunk cp-)
      gl-math
      gl-utils
@@ -10,10 +11,53 @@
      srfi-42 ; eager comprehension
      box ; mutable box
      nrepl
-     clojurian-syntax)
+     clojurian-syntax
+     prepl)
+
+(define REPL (make-prepl 1111))
+
+(define *fragment*
+#<<END
+#version 330
+in vec4 c;
+out vec4 fragColor;
+void main(){
+  fragColor = vec4(c.x,c.y,c.z,c.w);			;
+}
+END
+)
+
+(define program3 (make-box #f))
+
+(define (set-shaders! vertex-string fragment-string)
+  (let ([vertex-shader-id   (make-shader gl:+vertex-shader+ vertex-string)]
+	[fragment-shader-id (make-shader gl:+fragment-shader+ fragment-string)])
+    ;; compile shader, set program parameter using
+    (make-program (list vertex-shader-id fragment-shader-id))))
+
+
+;;;;; Utils ;;;;;
+
+(define % modulo)
+
+(define (map-indexed f elems)
+  (let loop ([i 0]
+	     [todo elems])
+    (if (eq? '() todo)
+	'()
+	(cons (f i (car todo))
+	      (loop (+ i 1) (cdr todo))))))
+
+(define (range init limit #!optional [step 1])
+  (if (>= init limit)
+      '()
+      (cons init (range (+ init step) limit step ))))
+
+(define (inc i) (+ 1 i))
+
+;;;;; Physics ;;;;;
 
 ;; TODO perform physics in a separate thread
-
 (define the-space (cp-space-new))
 
 (cp-space-set-gravity the-space (cp-v 0. -0.98))
@@ -63,11 +107,6 @@
 		    (doto (fixed-line-segment the-space (cp-v +5. -5.) (cp-v -5. -5.))
 			  (cp-shape-set-elasticity 0.95)))
 
-(define (range init limit #!optional [step 1])
-  (if (>= init limit)
-      '()
-      (cons init (range (+ init step) limit step ))))
-
 (define the-balls (box (let ([n 30])
 			 (map (lambda (i)
 				(let ([angle (/ (* pi 2 i) n)]
@@ -77,16 +116,61 @@
 					    (* radius (cos angle)))))
 			      (range 0 n)))))
 
+(define (damped-rotary-spring body-a body-b #!key angle (stiffness 40.) (damping 0.99))
+  (cp-damped-rotary-spring-new
+   body-a
+   body-b
+   (or angle (cp-vtoangle
+	      (cp-vsub
+	       (cp-body-get-position body-b)
+	       (cp-body-get-position body-a))))
+   stiffness
+   damping))
+
+(cp-space-add-constraint
+ the-space
+ (damped-rotary-spring
+  (alist-ref 'body (first (unbox the-balls)))
+  (alist-ref 'body (second (unbox the-balls)))))
 
 
-(define (inc i) (+ 1 i))
+;;;;; Graphics ;;;;;
+
+(use posix)
+(use srfi-18)
+
+(define (watch-reload! file on-change)
+  (on-change file)
+  (define (tsleep n)
+    (thread-sleep! (seconds->time (+ n (time->seconds (current-time))))))
+  (define (get-time)
+    (file-modification-time file))
+  (define active (box #t))
+  (define (stop)
+    (box-set! active #f))
+  (thread-start!
+   (lambda ()
+     (let loop ((filetime '()))
+       (display "Polling ") (display file) (newline)
+       (let ((newtime (get-time)))
+	 (when (not (equal? filetime newtime))
+	   (handle-exceptions e (lambda (e) (display e))
+	     (on-change file)))
+	 (tsleep 1)
+	 (loop newtime)))))
+  stop)
+
+(define v3 (box (read-all "vertex-shaders/v1.glsl")))
+
+
+;(watcher)
 
 (define *vertex*
 #<<END
 #version 330
 in vec2 position;
 in vec3 color;
-out vec3 c;
+out vec4 c;
 uniform mat4 MVP;
 
 void main(){
@@ -94,7 +178,7 @@ void main(){
    float d = sqrt ( (position.x * position.x) + (position.y * position.y) ) ;
    float r = atan(position.x , position.y);
    float v = max(d ,d+ sin(r*8));
-   c = vec3(v,v,v)		   ;
+   c = vec4(v,v,v,1)		   ;
 }
 END
 )
@@ -104,7 +188,7 @@ END
 #version 330
 in vec2 position;
 in vec3 color;
-out vec3 c;
+out vec4 c;
 uniform mat4 MVP;
 
 void main(){
@@ -112,21 +196,12 @@ void main(){
    float d = sqrt ( (position.x * position.x) + (position.y * position.y) ) ;
    float r = atan(position.x , position.y);
    float v = 1.0 - d;
-   c = vec3(v+ sin(r*8),v,v)		;
+   c = vec4(v+ sin(r*8),v,v,1)		;
 }
 END
 )
 
-(define *fragment*
-#<<END
-#version 330
-in vec3 c;
-out vec4 fragColor;
-void main(){
-  fragColor = vec4(c, 0.5);
-}
-END
-)
+
 
 (define (circle-positions n)
   (apply append (cons '(0 0)
@@ -140,7 +215,7 @@ END
 (define (circle-colors n)
   (apply append (cons '(255 0 255)
 		      (map (lambda (i)
-			     (let ([h (modulo i 2)])
+			     (let ([h (% i 2)])
 			       (map (compose (cut * <> 255.))
 				    (list h
 					  h
@@ -213,11 +288,9 @@ END
                                        (color #:float 3
                                               normalized: #t))
                           initial-elements: ((position . (-1 -1
-                                                           1 -1
-                                                           1  1
-                                                           -1  1
-
-							   ))
+							  +1 -1
+                                                          +1 +1
+                                                          -1 +1))
                                              (color . (255 255 0
                                                        0   255 0
                                                        0   0   255
@@ -250,6 +323,7 @@ END
 
 (define program (make-box #f))
 (define program2 (make-box #f))
+(define program3 (make-box #f))
 
 (define (render-shape shape program mvp)
   (gl:use-program program)
@@ -302,13 +376,13 @@ END
 
 (define (ball->node idx ball)
   (let ([body (alist-ref 'body ball)]
-	[programs (vector program program2)])
+	[programs (vector program program2 program3)])
     (make-node
      ;;
      (lambda (node mvp)
        ;(gl:use-program (box-ref program))
        (render-shape the-shape
-		     (box-ref (vector-ref programs (modulo idx 2)))
+		     (box-ref (vector-ref programs (modulo idx 3)))
 		     (m* (projection-matrix)
 			 (m*
 			  (translation (let ([body-pos (cp-body-get-position body)])
@@ -317,12 +391,6 @@ END
 						     0)))
 			  (m* (view-matrix)
 			      (model-matrix)))))))))
-
-(define (set-shaders! vertex-string fragment-string)
-  (let ([vertex-shader-id   (make-shader gl:+vertex-shader+ vertex-string)]
-	[fragment-shader-id (make-shader gl:+fragment-shader+ fragment-string)])
-    ;; compile shader, set program parameter using
-    (make-program (list vertex-shader-id fragment-shader-id))))
 
 (define (main)
   (glfw:with-window (800 600 "Example"
@@ -334,10 +402,15 @@ END
    (gl:init)
    ;; (print (:supported? "GL_ARB_framebuffer_object"))
 
+   (opengl:gl:Enable gl:+blend+)
+   (opengl:gl:BlendFunc gl:+src-alpha+ gl:+one-minus-src-alpha+ )
+
+
    ;(set! repl-thread (thread-start! (make-thread repl)))
 
    (set-box! program (set-shaders! *vertex* *fragment*))
    (set-box! program2 (set-shaders! *vertex2* *fragment*))
+   (set-box! program3 (set-shaders! (unbox v3) *fragment*))
 
    ;; create shape vertex array opbject
    (mesh-make-vao! the-shape `((position . ,(gl:get-attrib-location
@@ -346,6 +419,7 @@ END
 				     (box-ref program) "color"))))
 
    (let loop ([i 0])
+     (REPL) ; process repl event
      (cp-space-step the-space 1/60 ) ;; TODO use delta time
      (glfw:swap-buffers (glfw:window))
      (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
@@ -360,7 +434,7 @@ END
 ;;(use nrepl)
 ;(define nrepl-thread (thread-start! (lambda () (nrepl 1234))))
 
-;(define main-thread (thread-start! (make-thread main)))
+(define main-thread (thread-start! (make-thread main)))
 
 ;(define repl-thread (thread-start! (make-thread repl)))
 
@@ -368,20 +442,25 @@ END
   (use box)
   (set-box! program (set-shaders! *vertex2* *fragment*)))
 
-(define (map-indexed f elems)
-  (let loop ([i 0]
-	     [todo elems])
-    (if (eq? '() todo)
-	'()
-	(cons (f i (car todo))
-	      (loop (+ i 1) (cdr todo))))))
 
 (box-swap! the-nodes
 	   append
 	   (map-indexed ball->node (box-ref the-balls)))
 
 
-;(thread-join! main-thread)
-(main)
+
+(define watcher (watch-reload! "vertex-shaders/v1.glsl"
+			       (lambda (f)
+				 (when f
+				   (display "Updated") (display f) (newline)
+				   (box-set! v3 (read-all f))
+				   (set-box! program3 (set-shaders! (read-all f) *fragment*))
+				   (read-all f)
+				   (newline)))))
+
+(thread-join! main-thread)
+;(main)
+
+
 
 ;; run (use box) again in the repl
