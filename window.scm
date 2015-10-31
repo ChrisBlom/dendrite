@@ -30,8 +30,6 @@ void main(){
 END
 )
 
-(define program3 (make-box #f))
-
 (define (set-shaders! vertex-string fragment-string)
   (let ([vertex-shader-id   (make-shader gl:+vertex-shader+ vertex-string)]
 	[fragment-shader-id (make-shader gl:+fragment-shader+ fragment-string)])
@@ -183,53 +181,6 @@ END
 (define v2 (box (read-all "vertex-shaders/v2.glsl")))
 (define v3 (box (read-all "vertex-shaders/v3.glsl")))
 
-(define v4 (watched-slurp "vertex-shaders/v1.glsl"
-			  (lambda (file string)
-			    (display "Updated ")
-			    (display file)
-			    (newline))))
-
-
-;(watcher)
-
-(define *vertex*
-#<<END
-#version 330
-in vec2 position;
-in vec3 color;
-out vec4 c;
-uniform mat4 MVP;
-
-void main(){
-   gl_Position = MVP * vec4(position, 0.0, 1.0);
-   float d = sqrt ( (position.x * position.x) + (position.y * position.y) ) ;
-   float r = atan(position.x , position.y);
-   float v = max(d ,d+ sin(r*8));
-   c = vec4(v,v,v,1)		   ;
-}
-END
-)
-
-(define *vertex2*
-#<<END
-#version 330
-in vec2 position;
-in vec3 color;
-out vec4 c;
-uniform mat4 MVP;
-
-void main(){
-   gl_Position = MVP * vec4(position, 0.0, 1.0);
-   float d = sqrt ( (position.x * position.x) + (position.y * position.y) ) ;
-   float r = atan(position.x , position.y);
-   float v = 1.0 - d;
-   c = vec4(v+ sin(r*8),v,v,1)		;
-}
-END
-)
-
-
-
 (define (circle-positions n)
   (apply append (cons '(0 0)
 		      (map (lambda (i)
@@ -353,15 +304,15 @@ END
 (define program3 (make-box #f))
 
 
-
 (define (render-shape shape program mvp)
   (gl:use-program program)
   (gl:bind-vertex-array 0)
+
   (let ([id (gl:get-uniform-location program "ENERGY")])
     (when (> id -1)
       (gl:uniform1f id (sin (time->seconds (current-time))))))
 
-  ;; set MVP
+  ;; set MVP matrix
   (gl:uniform-matrix4fv (gl:get-uniform-location program "MVP")
 			1 #f
 			mvp)
@@ -442,7 +393,7 @@ END
 
    ;(set! repl-thread (thread-start! (make-thread repl)))
 
-   (set-box! program (set-shaders! *vertex* *fragment*))
+   (set-box! program (set-shaders! (unbox v1) *fragment*))
    (set-box! program2 (set-shaders! (unbox v2) *fragment*))
    (set-box! program3 (set-shaders! (unbox v3) *fragment*))
 
