@@ -13,9 +13,11 @@
      nrepl
      clojurian-syntax
      prepl
-     utils)
+     utils
+     symbol-utils)
 
-(define REPL (make-prepl 1111))
+(when (unbound? 'REPL)
+    (define REPL (make-prepl 1113)))
 
 (define *fragment*
 #<<END
