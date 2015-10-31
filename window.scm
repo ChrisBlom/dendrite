@@ -61,22 +61,21 @@ END
 ;; TODO perform physics in a separate thread
 (define the-space (cp-space-new))
 
-(cp-space-set-gravity the-space (cp-v 0. -0.98))
+(cp-space-set-gravity the-space (cp-v 0. -9.8))
 
 (define-record node
   render-fn ; takes node , mvp ,
 )
 
-(define (add-ball space x y)
-  (let* ((radius 0.2)
-	 (mass 1.)
-         (moment (cp-moment-for-circle mass 0. radius cp-vzero))
+(define (add-ball space x y #!key (elasticity 0.95) (friction 0.7) (mass 1.) (radius 0.1))
+  (let* ((moment (cp-moment-for-circle mass 0. radius cp-vzero))
 	 (body (cp-space-add-body space (cp-body-new  mass moment)))
-	 (shape (cp-space-add-shape space (cp-circle-shape-new body radius cp-vzero))))
-    (cp-shape-set-friction shape 0.7)
-    (cp-shape-set-elasticity shape 0.95)
+	 (shape (cp-circle-shape-new body radius cp-vzero)))
+    (cp-shape-set-friction shape friction)
+    (cp-shape-set-elasticity shape elasticity)
     (cp-body-set-position body (cp-v (exact->inexact x)
 				     (exact->inexact y)))
+    (cp-space-add-shape space shape)
     (list
      (cons 'body  body)
      (cons 'shape shape))))
@@ -95,27 +94,47 @@ END
 ;;
 ;;
 ;; -1 -1 ------- +1 -1
-(cp-space-add-shape the-space
-		    (doto (fixed-line-segment the-space (cp-v -5. -5.) (cp-v -5. +5.))
-			  (cp-shape-set-elasticity 0.95)))
-(cp-space-add-shape the-space
-		    (doto (fixed-line-segment the-space (cp-v -5. +5.) (cp-v +5. +5.))
-			  (cp-shape-set-elasticity 0.95)))
-(cp-space-add-shape the-space
-		    (doto (fixed-line-segment the-space (cp-v +5. +5.) (cp-v +5. -5.))
-			  (cp-shape-set-elasticity 0.95)))
-(cp-space-add-shape the-space
-		    (doto (fixed-line-segment the-space (cp-v +5. -5.) (cp-v -5. -5.))
-			  (cp-shape-set-elasticity 0.95)))
 
-(define the-balls (box (let ([n 30])
-			 (map (lambda (i)
-				(let ([angle (/ (* pi 2 i) n)]
-				      [radius 2])
-				  (add-ball the-space
-					    (* radius (sin angle))
-					    (* radius (cos angle)))))
-			      (range 0 n)))))
+(define the-balls (box #f))
+
+(define (init-physics)
+
+  (cp-space-add-shape the-space
+		      (doto (fixed-line-segment the-space (cp-v -5. -5.) (cp-v -5. +5.))
+			    (cp-shape-set-elasticity 0.95)))
+  (cp-space-add-shape the-space
+		      (doto (fixed-line-segment the-space (cp-v -5. +5.) (cp-v +5. +5.))
+			    (cp-shape-set-elasticity 0.95)))
+  (cp-space-add-shape the-space
+		      (doto (fixed-line-segment the-space (cp-v +5. +5.) (cp-v +5. -5.))
+			    (cp-shape-set-elasticity 0.95)))
+  (cp-space-add-shape the-space
+		      (doto (fixed-line-segment the-space (cp-v +5. -5.) (cp-v -5. -5.))
+			    (cp-shape-set-elasticity 0.95)))
+
+  (box-set! the-balls (let ([n 100])
+			(map (lambda (i)
+			       (let ([angle (/ (* pi 2 i 8) n)]
+				     [radius (* 4 (/ i n))])
+				 (add-ball the-space
+					   (* radius (sin angle))
+					   (* radius (cos angle)))))
+			     (range 0 n)))))
+
+(init-physics)
+
+
+;; (cp-space-bodies the-space)
+
+
+(define (clear-space space)
+
+  (for-each (cut cp-space-remove-body the-space <>) (cp-space-bodies the-space))
+
+  )
+
+
+
 
 (define (damped-rotary-spring body-a body-b #!key angle (stiffness 40.) (damping 0.99))
   (cp-damped-rotary-spring-new
