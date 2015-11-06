@@ -6,11 +6,10 @@ out vec4 c;
 uniform mat4 MVP;
 uniform float ENERGY;
 
-// FOOBAR
 void main(){
-   gl_Position = MVP * vec4(position, 0.0, 0.7);
+   gl_Position = MVP * vec4(position, 0.0, 1);
    float d = sqrt( (position.x * position.x) + (position.y * position.y) ) ;
    float r = atan(position.x , position.y);
    float v = 1-(0.5+sin( (r*9.0) + ENERGY )*0.5);
-   c = vec4(v*4,v*2,v,1-d*d*30);
+   c = vec4(0.2+v*4,v*3,v*3,1-d*d*30);
 }
