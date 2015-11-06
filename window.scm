@@ -20,18 +20,8 @@
 (when (unbound? 'REPL)
     (define REPL (make-prepl 1113)))
 
-(define *fragment*
-#<<END
-#version 330
-in vec4 c;
-out vec4 fragColor;
-void main(){
-  fragColor = vec4(c.x,c.y,c.z,c.w);			;
-}
-END
-)
 
-(define (set-shaders! vertex-string fragment-string)
+(define (compile-shaders! vertex-string fragment-string)
   (let ([vertex-shader-id   (make-shader gl:+vertex-shader+ vertex-string)]
 	[fragment-shader-id (make-shader gl:+fragment-shader+ fragment-string)])
     ;; compile shader, set program parameter using
@@ -40,6 +30,12 @@ END
 (define program1 (make-box #f))
 (define program2 (make-box #f))
 (define program3 (make-box #f))
+
+(define *v1* (box (read-all "vertex-shaders/v1.glsl")))
+(define *v2* (box (read-all "vertex-shaders/v2.glsl")))
+(define *v3* (box (read-all "vertex-shaders/v3.glsl")))
+
+(define *fragment* (box (read-all "fragment-shaders/simple.glsl")))
 
 (define (ball->node idx ball)
   (let* ([body (alist-ref 'body ball)]
@@ -96,8 +92,8 @@ END
 (define the-mouse-ball (box #f))
 
 (define (init-physics)
-  (let ([space (cp-space-new)])
 
+  (let ([space (cp-space-new)])
 
     (cp-space-set-iterations space 30) ; 10 default
 
@@ -192,9 +188,6 @@ END
 	       (thread-sleep! 1)
 	       (loop newtime)))))))
 
-(define v1 (box (read-all "vertex-shaders/v1.glsl")))
-(define v2 (box (read-all "vertex-shaders/v2.glsl")))
-(define v3 (box (read-all "vertex-shaders/v3.glsl")))
 
 (include "mesh.scm")
 
@@ -216,9 +209,7 @@ END
 (define (model-matrix)
   (mat4-identity))
 
-(define circle-mesh (disk 100))
-
-(define the-hex (disk 6))
+(define circle-mesh (disk 60))
 
 (define (render-mesh mesh program mvp energy)
   (gl:use-program program)
@@ -234,11 +225,13 @@ END
 			1 #f
 			mvp)
   ;; render mesh
-  (gl:bind-vertex-array (mesh-vao mesh))
-  (gl:draw-elements-base-vertex (mode->gl (mesh-mode mesh))
-				(mesh-n-indices mesh)
-				(type->gl (mesh-index-type mesh))
-				#f 0))
+  (let ([vao (mesh-vao mesh)])
+    (when vao
+      (gl:bind-vertex-array vao)
+      (gl:draw-elements-base-vertex (mode->gl (mesh-mode mesh))
+				    (mesh-n-indices mesh)
+				    (type->gl (mesh-index-type mesh))
+				    #f 0))))
 
 
 (define (render nodes)
@@ -343,9 +336,9 @@ END
    (opengl:gl:Enable gl:+blend+)
    (opengl:gl:BlendFunc gl:+src-alpha+ gl:+one-minus-src-alpha+ )
 
-   (set-box! program1 (set-shaders! (unbox v1) *fragment*))
-   (set-box! program2 (set-shaders! (unbox v2) *fragment*))
-   (set-box! program3 (set-shaders! (unbox v3) *fragment*))
+   (set-box! program1 (compile-shaders! (unbox *v1*) (unbox *fragment*)))
+   (set-box! program2 (compile-shaders! (unbox *v2*) (unbox *fragment*)))
+   (set-box! program3 (compile-shaders! (unbox *v3*) (unbox *fragment*)))
 
    ;; create vertex array object for mesh
    (mesh-make-vao! circle-mesh `((position . ,(gl:get-attrib-location (box-ref program1) "position"))
@@ -380,8 +373,8 @@ END
 			       (lambda (f)
 				 (when f
 				   (display "Updated") (display f) (newline)
-				   (box-set! v1 (read-all f))
-				   (set-box! program1 (set-shaders! (read-all f) *fragment*))
+				   (box-set! *v1* (read-all f))
+				   (set-box! program1 (compile-shaders! (read-all f) (unbox *fragment*)))
 				   (read-all f)
 				   (newline)))))
 
@@ -389,8 +382,8 @@ END
 			       (lambda (f)
 				 (when f
 				   (display "Updated") (display f) (newline)
-				   (box-set! v2 (read-all f))
-				   (set-box! program2 (set-shaders! (read-all f) *fragment*))
+				   (box-set! *v2* (read-all f))
+				   (set-box! program2 (compile-shaders! (read-all f) (unbox *fragment*) ))
 				   (read-all f)
 				   (newline)))))
 
@@ -398,8 +391,19 @@ END
 			       (lambda (f)
 				 (when f
 				   (display "Updated") (display f) (newline)
-				   (box-set! v3 (read-all f))
-				   (set-box! program3 (set-shaders! (read-all f) *fragment*))
+				   (box-set! *v3* (read-all f))
+				   (set-box! program3 (compile-shaders! (read-all f) (unbox *fragment*) ))
+				   (read-all f)
+				   (newline)))))
+
+(define watcher-4 (watch-reload! "fragment-shaders/simple.glsl"
+			       (lambda (f)
+				 (when f
+				   (display "Updated") (display f) (newline)
+				   (box-set! *fragment* (read-all f))
+				   (set-box! program1 (compile-shaders! (unbox *v1*) (unbox *fragment*) ))
+				   (set-box! program2 (compile-shaders! (unbox *v2*) (unbox *fragment*) ))
+				   (set-box! program3 (compile-shaders! (unbox *v3*) (unbox *fragment*) ))
 				   (read-all f)
 				   (newline)))))
 
