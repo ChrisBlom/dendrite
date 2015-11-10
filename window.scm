@@ -17,9 +17,34 @@
      symbol-utils
      posix)
 
+;;;;; Utils ;;;;;
+
+(include "utils.scm")
+(include "mesh.scm")
+(include "chipmunk-utils.scm")
+
+
+
 (when (unbound? 'REPL)
     (define REPL (make-prepl 1113)))
 
+(define-syntax comment
+  (syntax-rules ()
+    [(comment expr ...)
+     #f]))
+
+(define-syntax ./trace
+  (syntax-rules ()
+    [(_ a ...)
+     (let ([name-to-val (map cons (list 'a ...) (list a ...))])
+       (printf "---- TRACE: ---- \n" )
+       (for-each
+	(lambda (x)
+	  (printf " ~s : ~s\n" (car x) (cdr x))
+	  )
+	name-to-val)
+       (printf "---------------- \n" )
+       (cdr (last name-to-val)))]))
 
 (define (compile-shaders! vertex-string fragment-string)
   (let ([vertex-shader-id   (make-shader gl:+vertex-shader+ vertex-string)]
@@ -47,15 +72,16 @@
 				 (unbox (vector-ref programs (modulo idx 3)))
 				 (m* projection-matrix
 				     (m* (translation (make-point (cp-v.x body-pos)
-							       (- (cp-v.y body-pos))
-							       0))
+								  (- (cp-v.y body-pos))
+								  0))
 					 (m* view-matrix
 					     (rotate-z angle (model-matrix)))))
-				 (cp-vlength (cp-body-get-velocity body))))))))
+				 (cp-vlength (cp-body-get-velocity body))
+				 (vector
+				  1
+				  (+ 0.5 (* 0.5 (sin idx)))
+				  (+ 0.5 (* 0.5 (cos idx))))))))))
 
-;;;;; Utils ;;;;;
-
-(include "utils.scm")
 
 ;;;;; Physics ;;;;;
 
@@ -91,8 +117,27 @@
 
 (define the-mouse-ball (box #f))
 
-(define (init-physics)
+(load "ringbuffer.scm")
+(import ringbuffer)
 
+(define (circle-ring n)
+  (let ([b (list->ringbuffer
+	    (map (lambda (i)
+		   (let ([angle (* i (/ n) pi 2)])
+		     (cons (sin angle)
+			   (cos angle))))
+		 (range 0 n)))])
+    (map (lambda (j)
+	   `( ,(ringbuffer-get b j)
+	      ,(ringbuffer-get b (+ 1 j))))
+	 (range 0 n))))
+
+;;   ==== end> 0 <start =========body========= end> 0 <start ====
+
+
+
+
+(define (init-physics)
   (let ([space (cp-space-new)])
 
     (cp-space-set-iterations space 30) ; 10 default
@@ -122,12 +167,12 @@
     ;;   (alist-ref 'body (first (unbox the-balls)))
     ;;   (alist-ref 'body (second (unbox the-balls)))))
 
-    (box-set! the-mouse-ball (add-ball space 0. 0. radius: 3.))
+    (box-set! the-mouse-ball (add-ball space 0. 0. #:radius 1.))
 
     (box-set! the-space space)
 
     (box-set! the-balls (cons (unbox the-mouse-ball)
-			      (let ([n 500])
+			      (let ([n 2000])
 				(map (lambda (i)
 				       (let ([angle (/ (* pi 2 i 8) n)]
 					     [radius (* 4 (/ i n))])
@@ -139,6 +184,65 @@
     (box-set! the-nodes (map-indexed ball->node (box-ref the-balls)))))
 
 (init-physics)
+
+(define cs
+  (let* ([m (list->ringbuffer (map (lambda (x)
+				     (let* ([start (first x)]
+					    [end (second x)]
+					    [start-pos (cp-v (car start) (cdr start))]
+					    [end-pos (cp-v (car end) (cdr end))]
+					    [center-pos (cp-vlerp start-pos end-pos 0.5)]
+					    [body-start (cp-body-new 1. ; moment
+								     1. ; mass
+								     )]
+
+					    [body-end (cp-body-new 1. ; moment
+								   1. ; mass
+								   )]
+
+					    [body-center (cp-body-new 11. ; moment
+								      1. ; mass
+								      )]
+
+					    [shape (cp-segment-shape-new body-center
+									 start-pos
+									 end-pos
+									 .4 ; radius
+									 )])
+					;				     (cp-body-set-position body-start start-pos)
+					;				     (cp-body-set-position body-end end-pos)
+				       (cp-body-set-position body-center center-pos)
+				       (display the-space) (newline)
+				       (display shape) (newline)
+					;				     (cp-space-add-shape (unbox the-space) body-center)
+
+				       (cp-space-add-shape (unbox the-space) shape)
+				       (cp-space-add-body (unbox the-space) body-center)
+
+
+				       `((body-start . ,body-start)
+					 (body-end . ,body-end)
+					 (body-center . ,body-center)
+					 (shape . ,shape))))
+				   (circle-ring 9)
+				   ))])
+    (map (lambda (i)
+	   (let* ([current (ringbuffer-get m i)]
+		  [before (ringbuffer-get m (+ 1 i))]
+		  [after (ringbuffer-get m (- i 1))]
+
+		  [c (damped-spring (alist-ref 'body-center current)
+				    (alist-ref 'body-center before)
+					;anchor-a: (./trace (cp-body-get-position (alist-ref 'body-center current)))
+					;anchor-b: (./trace (cp-body-get-position (alist-ref 'body-center before)))
+				    )])
+
+	     ;(./trace i c (constraint-type c))
+	     	      (cp-space-add-constraint (unbox the-space) c)
+	     ;; [panic] out of memory - heap full while resizing - execution terminated
+	     c
+	     ))
+	 (range 0 (ringbuffer-length m)))))
 
 ;; (for-each
 ;;  (cut cp-shape-set-elasticity <> 0.1)
@@ -162,7 +266,7 @@
   (thread-start!
    (lambda ()
      (let loop ((filetime '()))
-       ;(display "Polling ") (display file) (newline)
+
        (let ((newtime (get-time)))
 	 (when (not (equal? filetime newtime))
 	   (handle-exceptions e (lambda (e) (display e))
@@ -188,9 +292,6 @@
 	       (thread-sleep! 1)
 	       (loop newtime)))))))
 
-
-(include "mesh.scm")
-
 (define (projection-matrix)
   (perspective 800 600 0.1 100 70))
 
@@ -209,9 +310,9 @@
 (define (model-matrix)
   (mat4-identity))
 
-(define circle-mesh (disk 60))
+(define circle-mesh (disk 4))
 
-(define (render-mesh mesh program mvp energy)
+(define (render-mesh mesh program mvp energy color)
   (gl:use-program program)
   (gl:bind-vertex-array 0)
 
@@ -221,9 +322,10 @@
       (gl:uniform1f id energy)))
 
   ;; set MVP matrix
-  (gl:uniform-matrix4fv (gl:get-uniform-location program "MVP")
-			1 #f
-			mvp)
+  (gl:uniform-matrix4fv (gl:get-uniform-location program "MVP") 1 #f mvp)
+
+  (gl:uniform3fv (gl:get-uniform-location program "colormod") 1
+		 (list->f32vector (vector->list color)))
   ;; render mesh
   (let ([vao (mesh-vao mesh)])
     (when vao
@@ -275,6 +377,15 @@
 				 ;(display (list 'cursor= x y)) (newline)
 				 ;(display (list 'cursor-world= (screen->world (cons x y)))) (newline)
 				 ))
+
+
+(define (set-gravity)
+  (let ([v (screen->world (unbox the-mouse-pos))])
+    (cp-space-set-gravity (unbox the-space)
+			  (cp-v (f32vector-ref v 0)
+				(f32vector-ref v 1)))))
+
+
 (define (u32deref x)
  (u32vector-ref x 0))
 
@@ -316,11 +427,7 @@
     ;; configure framebuffer
     (gl:framebuffer-texture gl:+framebuffer+ gl:+color-attachment0+ (u32deref rendered-texture) 0)
 
-    (list rendered-texture depthrenderbuffer)
-    )
-
-
-  )
+    (list rendered-texture depthrenderbuffer)))
 
 (define (main)
   (glfw:with-window (800 600 "Dendrite"
@@ -348,8 +455,8 @@
 	      [t (current-milliseconds)])
      (REPL) ; process repl event
      (cp-space-step (unbox the-space) 1/60 ) ;; TODO use delta time
-     (cp-space-step (unbox the-space) 1/60 ) ;; TODO use delta time
-     (cp-space-step (unbox the-space) 1/60 ) ;; TODO use delta time
+     ;(cp-space-step (unbox the-space) 1/60 ) ;; TODO use delta time
+     ;(cp-space-step (unbox the-space) 1/60 ) ;; TODO use delta time
      (let* ([p (screen->world (unbox the-mouse-pos))]
 	    [mouse-x (f32vector-ref p 0)]
 	    [mouse-y (f32vector-ref p 1)])
@@ -378,7 +485,7 @@
 				   (read-all f)
 				   (newline)))))
 
-(define watcher-2 (watch-reload! "vertex-shaders/v2.glsl"
+(define watcher-2 (watch-reload! "vertex-shaders/v1.glsl"
 			       (lambda (f)
 				 (when f
 				   (display "Updated") (display f) (newline)
@@ -387,7 +494,7 @@
 				   (read-all f)
 				   (newline)))))
 
-(define watcher-3 (watch-reload! "vertex-shaders/v3.glsl"
+(define watcher-3 (watch-reload! "vertex-shaders/v1.glsl"
 			       (lambda (f)
 				 (when f
 				   (display "Updated") (display f) (newline)
