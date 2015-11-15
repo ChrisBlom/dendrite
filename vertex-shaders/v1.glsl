@@ -11,7 +11,7 @@ uniform vec3 colormod;
 
 
 void main(){
-   gl_Position = MVP * vec4(position, 0.0, 1);
+   gl_Position = MVP * vec4(position, 0.0, 0.6);
    //float d = sqrt( (position.x * position.x) + (position.y * position.y) ) ;
    //   float r = atan(position.x , position.y);
    //float v = (0.5+sin( (r*9.0) + ENERGY )*0.5);
@@ -20,10 +20,8 @@ void main(){
 	    colormod.g,
 	    colormod.b,
 	    ENERGY);
-   p = vec3(position.x , position.y,
 
-	    atan(position.x,position.y)
-	    );
+   p = vec3(position.x , position.y, atan(position.x,position.y) );
 
 ;
 

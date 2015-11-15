@@ -95,3 +95,22 @@
               indices: '(type: #:ushort
                          initial-elements: (0 1 2
 					      0 2 3))))
+
+(use matchable)
+
+(define (line-mesh start end)
+  (make-mesh
+   vertices: `(attributes: ((position #:float 2)
+			    (color #:float 3 normalized: #t))
+	       initial-elements: ((position . ,(append start end))
+					      (color . (255 255 0
+						        0   255 0))))
+   indices: '(type: #:ushort
+		    initial-elements: (0 1))
+   mode: #:lines))
+
+
+(define (line-mesh-vertices x1 y1 x2 y3)
+  `((position . ,(list x1 y1 x2 y3))
+    (color . (255 255 0
+           	  0   255 0))))

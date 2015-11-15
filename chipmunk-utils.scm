@@ -4,17 +4,7 @@
      srfi-4) ; vectors
 
 
-(define (damped-spring body-a body-b #!key length (stiffness 40.) (damping 0.99) anchor-a anchor-b)
-  (cp-damped-spring-new
-   body-a
-   body-b
-   (or anchor-a (cp-v 0. 0.))
-   (or anchor-b (cp-v 0. 0.))
-   (or length (cp-vdist
-	       (cp-body-get-position body-a)
-	       (cp-body-get-position body-b)))
-   stiffness
-   damping))
+
 
 (define (damped-rotary-spring body-a body-b #!key angle (stiffness 40.) (damping 0.99))
   (damped-rotary-spring-new

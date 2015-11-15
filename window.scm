@@ -23,28 +23,11 @@
 (include "mesh.scm")
 (include "chipmunk-utils.scm")
 
-
+(define the-line-mesh (line-mesh '(0 0) '(0 0)))
 
 (when (unbound? 'REPL)
-    (define REPL (make-prepl 1113)))
+  (define REPL (make-prepl 1113)))
 
-(define-syntax comment
-  (syntax-rules ()
-    [(comment expr ...)
-     #f]))
-
-(define-syntax ./trace
-  (syntax-rules ()
-    [(_ a ...)
-     (let ([name-to-val (map cons (list 'a ...) (list a ...))])
-       (printf "---- TRACE: ---- \n" )
-       (for-each
-	(lambda (x)
-	  (printf " ~s : ~s\n" (car x) (cdr x))
-	  )
-	name-to-val)
-       (printf "---------------- \n" )
-       (cdr (last name-to-val)))]))
 
 (define (compile-shaders! vertex-string fragment-string)
   (let ([vertex-shader-id   (make-shader gl:+vertex-shader+ vertex-string)]
@@ -55,32 +38,36 @@
 (define program1 (make-box #f))
 (define program2 (make-box #f))
 (define program3 (make-box #f))
+(define program-line (make-box #f))
 
 (define *v1* (box (read-all "vertex-shaders/v1.glsl")))
 (define *v2* (box (read-all "vertex-shaders/v2.glsl")))
 (define *v3* (box (read-all "vertex-shaders/v3.glsl")))
+(define *vertex-line* (box (read-all "vertex-shaders/line.glsl")))
 
 (define *fragment* (box (read-all "fragment-shaders/simple.glsl")))
 
+(define *fragment-constant* (box (read-all "fragment-shaders/constant.glsl")))
+(define *fragment-line* (box (read-all "fragment-shaders/line.glsl")))
+
 (define (ball->node idx ball)
-  (let* ([body (alist-ref 'body ball)]
-	 [programs (vector program1 program2 program3)])
+  (let* ([body (alist-ref 'body ball)])
     (make-node (lambda (node projection-matrix view-matrix)
 		 (let ([angle (- (cp-body-get-angle body))]
 		       [body-pos (cp-body-get-position body)])
 		   (render-mesh circle-mesh
-				 (unbox (vector-ref programs (modulo idx 3)))
-				 (m* projection-matrix
-				     (m* (translation (make-point (cp-v.x body-pos)
-								  (- (cp-v.y body-pos))
-								  0))
-					 (m* view-matrix
-					     (rotate-z angle (model-matrix)))))
-				 (cp-vlength (cp-body-get-velocity body))
-				 (vector
-				  1
-				  (+ 0.5 (* 0.5 (sin idx)))
-				  (+ 0.5 (* 0.5 (cos idx))))))))))
+				(unbox program1)
+				(m* projection-matrix
+				    (m* (translation (make-point (cp-v.x body-pos)
+								 (- (cp-v.y body-pos))
+								 0))
+					(m* view-matrix
+					    (rotate-z angle (model-matrix)))))
+				(cp-vlength (cp-body-get-velocity body))
+				(vector
+				 1
+				 (+ 0.5 (* 0.5 (sin idx)))
+				 (+ 0.5 (* 0.5 (cos idx))))))))))
 
 
 ;;;;; Physics ;;;;;
@@ -93,7 +80,7 @@
   )
 
 
-;(for-each (lambda (s) (cp-shape-set-friction s 0.)) (cp-space-shapes (unbox the-space)))
+					;(for-each (lambda (s) (cp-shape-set-friction s 0.)) (cp-space-shapes (unbox the-space)))
 
 (define (add-ball space x y #!key (elasticity 0.95) (friction 0.2) (mass 1.) (radius 0.1))
   (let* ((moment (cp-moment-for-circle mass 0. radius cp-vzero))
@@ -124,8 +111,8 @@
   (let ([b (list->ringbuffer
 	    (map (lambda (i)
 		   (let ([angle (* i (/ n) pi 2)])
-		     (cons (sin angle)
-			   (cos angle))))
+		     (cons (* 2 (sin angle))
+			   (* 2 (cos angle)))))
 		 (range 0 n)))])
     (map (lambda (j)
 	   `( ,(ringbuffer-get b j)
@@ -144,35 +131,21 @@
 
     ;; walls
     (cp-space-add-shapes space
-     (doto (fixed-line-segment space (cp-v -5. -5.) (cp-v -5. +5.) radius: 0.4)
-	   (cp-shape-set-elasticity 0.95))
-     (doto (fixed-line-segment space (cp-v -5. +5.) (cp-v +5. +5.) radius: 0.4)
-	   (cp-shape-set-elasticity 0.95))
-     (doto (fixed-line-segment space (cp-v +5. +5.) (cp-v +5. -5.) radius: 0.4)
-	   (cp-shape-set-elasticity 0.95))
-     (doto (fixed-line-segment space (cp-v +5. -5.) (cp-v -5. -5.) radius: 0.4)
-	   (cp-shape-set-elasticity 0.95))
-     ;; diagional
-     ;; (doto (fixed-line-segment space (cp-v +5. +5.) (cp-v -5. -5.))
-     ;; 	   (cp-shape-set-elasticity 0.95))
-     ;; (doto (fixed-line-segment space (cp-v -5. +5.) (cp-v +5. -5.))
-     ;; 	   (cp-shape-set-elasticity 0.95))
-     )
+			 (doto (fixed-line-segment space (cp-v -5. -5.) (cp-v -5. +5.) radius: 0.4)
+			       (cp-shape-set-elasticity 0.95))
+			 (doto (fixed-line-segment space (cp-v -5. +5.) (cp-v +5. +5.) radius: 0.4)
+			       (cp-shape-set-elasticity 0.95))
+			 (doto (fixed-line-segment space (cp-v +5. +5.) (cp-v +5. -5.) radius: 0.4)
+			       (cp-shape-set-elasticity 0.95))
+			 (doto (fixed-line-segment space (cp-v +5. -5.) (cp-v -5. -5.) radius: 0.4)
+			       (cp-shape-set-elasticity 0.95)))
 
-    ;(cp-space-set-gravity space (cp-v 0. -0.98))
-
-    ;; (cp-space-add-constraint
-    ;;  the-space
-    ;;  (damped-rotary-spring
-    ;;   (alist-ref 'body (first (unbox the-balls)))
-    ;;   (alist-ref 'body (second (unbox the-balls)))))
-
-    (box-set! the-mouse-ball (add-ball space 0. 0. #:radius 1.))
+    (box-set! the-mouse-ball (add-ball space 0. 0. #:radius 1. #:friction 0.01))
 
     (box-set! the-space space)
 
     (box-set! the-balls (cons (unbox the-mouse-ball)
-			      (let ([n 2000])
+			      (let ([n 200])
 				(map (lambda (i)
 				       (let ([angle (/ (* pi 2 i 8) n)]
 					     [radius (* 4 (/ i n))])
@@ -185,64 +158,194 @@
 
 (init-physics)
 
+
+(define (damped-spring body-a body-b #!key length (stiffness 40.) (damping 0.99) anchor-a anchor-b)
+  (let ([c  (cp-damped-spring-new
+	     (./trace body-a)
+	     (./trace body-b)
+	     (./trace (or anchor-a cp-v0))
+	     (./trace (or anchor-b cp-v0))
+	     (./trace (or length (cp-vdist
+				  (cp-body-get-position body-a)
+				  (cp-body-get-position body-b))) )
+	     (./trace stiffness)
+	     (./trace damping))])
+    (./trace c)
+    ))
+
+
+
+(define render-circle-shape (box #f))
+(define *render-constraint* (box #f))
+
+
+(box-set! render-circle-shape
+	  (lambda (projection-matrix view-matrix segment )
+	    (let* (
+		   [body (cp-shape-get-body segment)]
+					;[pos-a (cp-segment-shape-get-a segment)]
+					;		   [pos-b (cp-segment-shape-get-b segment)]
+		   [angle (+ (/ pi 4) (- (cp-body-get-angle body)))]
+		   [body-pos (cp-body-get-position body)]
+		   [trans (make-point (cp-v.x body-pos)
+				      (- (cp-v.y body-pos))
+				      0)])
+	      (render-mesh circle-mesh
+			   (unbox program3)
+
+			   (m* projection-matrix
+			       (m* (translation trans)
+				   (m* view-matrix
+				       (rotate-z angle (model-matrix)))))
+
+			   (cp-vlength (cp-body-get-velocity body))
+
+			   (vector 1 1 0)))))
+
+(box-set! *render-constraint*
+	  (lambda (projection-matrix view-matrix constraint )
+	    (let* ([pos-a (cp-body-get-position (cp-constraint-get-body-a constraint))]
+		   [pos-b (cp-body-get-position (cp-constraint-get-body-b constraint))]
+		   [angle (cp-vtoangle (cp-v- pos-a pos-b))]
+		   [middle (cp-vlerp pos-a pos-b 0.5)]
+		   [trans (make-point (cp-v.x middle)
+				      (- (cp-v.y  middle))
+				      0.)]
+		   )
+
+
+	      (mesh-update! the-line-mesh (line-mesh-vertices (cp-v.x pos-a) (- (cp-v.y pos-a))
+							      (cp-v.x pos-b) (- (cp-v.y pos-b))))
+
+	      (render-mesh the-line-mesh
+			   (unbox program-line)
+			   (m* projection-matrix
+			       (m* view-matrix
+				   (model-matrix)))
+			   (cp-constraint-get-impulse constraint)
+			   (vector 1 0 1)))))
+
+(define edges
+  (list->vector
+   (map (lambda (x)
+	  (let* ([start (first x)]
+		 [end (second x)]
+		 [start-pos (cp-v (car start) (cdr start))]
+		 [end-pos (cp-v (car end) (cdr end))]
+		 [center-pos (cp-vlerp start-pos end-pos 0.5)]
+		 [mass 0.3]
+		 [radius 0.2]
+		 [body-center (cp-body-new (cp-moment-for-segment mass start-pos end-pos radius) mass)]
+		 [shape (cp-circle-shape-new body-center radius cp-vzero)])
+	    (cp-body-set-position body-center center-pos)
+	    (cp-space-add-body (unbox the-space) body-center)
+	    (cp-space-add-shape (unbox the-space) shape)
+	    (box-swap! the-nodes
+		       (cut cons
+			 (let* ([body body-center])
+			   (make-node (lambda (node projection-matrix view-matrix )
+					((unbox render-circle-shape) projection-matrix view-matrix shape))))
+			 <>))
+
+	    `((body-center . ,body-center)
+	      (shape . ,shape))))
+	(circle-ring 24))))
+
+(define the-damping 0.9999)
+
 (define cs
-  (let* ([m (list->ringbuffer (map (lambda (x)
-				     (let* ([start (first x)]
-					    [end (second x)]
-					    [start-pos (cp-v (car start) (cdr start))]
-					    [end-pos (cp-v (car end) (cdr end))]
-					    [center-pos (cp-vlerp start-pos end-pos 0.5)]
-					    [body-start (cp-body-new 1. ; moment
-								     1. ; mass
-								     )]
+  (append-map (lambda (offset)
+		(append-map (lambda (i) (let* ([current (vector-ref edges i)]
+					  [before (vector-ref edges (% (+ i offset) (vector-length edges)))]
+					  [body-current (alist-ref 'body-center current)]
+					  [body-before (alist-ref 'body-center before)]
+					  [constraint (cp-damped-spring-new
+						       body-before
+						       body-current
+						       cp-v0
+						       cp-v0
+						       (cp-vlength (cp-v- (cp-body-get-position body-before)
+									  (cp-body-get-position body-current)))
+						       100.
+						       the-damping
+						       )]
+					  [rot-constraint (cp-damped-rotary-spring-new
+							   body-before
+							   body-current
+							   (cp-vtoangle (cp-v- (cp-body-get-position body-before)
+									       (cp-body-get-position body-current)))
+							   100.
+							   the-damping
+							   )])
+				     (box-swap! the-nodes
+						(cut append <>
+						     (list (make-node (lambda (node projection-matrix view-matrix )
+									((unbox *render-constraint*) projection-matrix view-matrix constraint)))
+							   (make-node (lambda (node projection-matrix view-matrix )
+									((unbox *render-constraint*) projection-matrix view-matrix rot-constraint))))))
+				     (list constraint rot-constraint)
+				     ))
+			    (range 0 (vector-length edges))))
+	      '(1 3 9 11)))
 
-					    [body-end (cp-body-new 1. ; moment
-								   1. ; mass
-								   )]
+(for-each (cut cp-space-add-constraint (unbox the-space) <>)  cs)
 
-					    [body-center (cp-body-new 11. ; moment
-								      1. ; mass
-								      )]
+(define rcs
+  (let* ([poss (map (lambda (x) (cp-body-get-position (alist-ref 'body-center x)))
+		    (vector->list edges))]
+	 [il (/ 1 (length poss))]
+	 [center-pos (cp-v* (reduce cp-v+ (cp-v 0. 0.) poss) il)]
+	 [body-center (cp-body-new 10. 20.)]
+	 [radius 0.5]
+	 [shape (cp-circle-shape-new body-center radius cp-vzero)])
+    (cp-body-set-position body-center center-pos)
+    (cp-space-add-body (unbox the-space) body-center)
+    (cp-space-add-shape (unbox the-space) shape)
 
-					    [shape (cp-segment-shape-new body-center
-									 start-pos
-									 end-pos
-									 .4 ; radius
-									 )])
-					;				     (cp-body-set-position body-start start-pos)
-					;				     (cp-body-set-position body-end end-pos)
-				       (cp-body-set-position body-center center-pos)
-				       (display the-space) (newline)
-				       (display shape) (newline)
-					;				     (cp-space-add-shape (unbox the-space) body-center)
-
-				       (cp-space-add-shape (unbox the-space) shape)
-				       (cp-space-add-body (unbox the-space) body-center)
+    (box-swap! the-nodes
+	       (cut cons
+		 (let* ([body body-center])
+		   (make-node (lambda (node projection-matrix view-matrix )
+				((unbox render-circle-shape) projection-matrix view-matrix shape))))
+		 <>))
 
 
-				       `((body-start . ,body-start)
-					 (body-end . ,body-end)
-					 (body-center . ,body-center)
-					 (shape . ,shape))))
-				   (circle-ring 9)
-				   ))])
-    (map (lambda (i)
-	   (let* ([current (ringbuffer-get m i)]
-		  [before (ringbuffer-get m (+ 1 i))]
-		  [after (ringbuffer-get m (- i 1))]
+    (append-map (lambda (i) (let* ([current (vector-ref edges i)]
+			      [before (vector-ref edges (% (+ i 1) (vector-length edges)))]
+			      [body-current (alist-ref 'body-center current)]
+			      [constraint (cp-damped-spring-new
+					   body-center
+					   body-current
+					   (cp-vlerp cp-v0 (cp-body-get-position body-center) 0.1)
+					   cp-v0
+					   (cp-vlength (cp-v- (cp-body-get-position body-center)
+							      (cp-body-get-position body-current)))
+					   100.
+					   the-damping
+					   )]
+			      [rot-constraint (cp-damped-rotary-spring-new
+					       body-center
+					       body-current
+					       (cp-vtoangle (cp-v- (cp-body-get-position body-center)
+								   (cp-body-get-position body-current)))
+					       100.
+					       the-damping
+					       )])
+			 (box-swap! the-nodes
+				    (cut append <>
+					 (list (make-node (lambda (node projection-matrix view-matrix )
+							    ((unbox *render-constraint*) projection-matrix view-matrix constraint)))
+					       (make-node (lambda (node projection-matrix view-matrix )
+							    ((unbox *render-constraint*) projection-matrix view-matrix rot-constraint))))
+					 ))
 
-		  [c (damped-spring (alist-ref 'body-center current)
-				    (alist-ref 'body-center before)
-					;anchor-a: (./trace (cp-body-get-position (alist-ref 'body-center current)))
-					;anchor-b: (./trace (cp-body-get-position (alist-ref 'body-center before)))
-				    )])
+			 (list constraint rot-constraint)
+			 ))
+		(range 0 (vector-length edges)))))
 
-	     ;(./trace i c (constraint-type c))
-	     	      (cp-space-add-constraint (unbox the-space) c)
-	     ;; [panic] out of memory - heap full while resizing - execution terminated
-	     c
-	     ))
-	 (range 0 (ringbuffer-length m)))))
+(for-each (cut cp-space-add-constraint (unbox the-space) <>)  rcs)
+
+
 
 ;; (for-each
 ;;  (cut cp-shape-set-elasticity <> 0.1)
@@ -293,7 +396,7 @@
 	       (loop newtime)))))))
 
 (define (projection-matrix)
-  (perspective 800 600 0.1 100 70))
+  (perspective 600 600 0.1 100 70))
 
 (define the-eye-point
   (box (make-point 0 0 7)))
@@ -311,6 +414,8 @@
   (mat4-identity))
 
 (define circle-mesh (disk 4))
+
+(define rectangle-mesh rect)
 
 (define (render-mesh mesh program mvp energy color)
   (gl:use-program program)
@@ -339,7 +444,6 @@
 (define (render nodes)
   (let ([projection (projection-matrix)]
 	[view (view-matrix)])
-
     ;; call render fn of each node
     (for-each (lambda (node)
 		(let ([render-fn (node-render-fn node)])
@@ -372,10 +476,10 @@
 
 ;;
 (glfw:cursor-position-callback (lambda (window x y)
-				 (box-set! the-mouse-pos (cons (+ (- (/ x 2)) 200)
+				 (box-set! the-mouse-pos (cons (+ (- (/ x 2)) 150)
 							       (+ (- (/ y 2)) 150)))
-				 ;(display (list 'cursor= x y)) (newline)
-				 ;(display (list 'cursor-world= (screen->world (cons x y)))) (newline)
+					;(display (list 'cursor= x y)) (newline)
+					;(display (list 'cursor-world= (screen->world (cons x y)))) (newline)
 				 ))
 
 
@@ -387,7 +491,7 @@
 
 
 (define (u32deref x)
- (u32vector-ref x 0))
+  (u32vector-ref x 0))
 
 (define (render-to-texture)
   ;;; http://www.opengl-tutorial.org/intermediate-tutorials/tutorial-14-render-to-texture/
@@ -429,91 +533,134 @@
 
     (list rendered-texture depthrenderbuffer)))
 
+
+
 (define (main)
-  (glfw:with-window (800 600 "Dendrite"
+  (glfw:with-window (600 600 "Dendrite"
 			 resizable: #f
 			 context-version-major: 3
 			 context-version-minor: 2
 			 opengl-forward-compat: #t
 			 opengl-profile: glfw:+opengl-core-profile+)
-   (gl:init)
-   ;; (print (:supported? "GL_ARB_framebuffer_object"))
+		    (gl:init)
+		    ;; (print (:supported? "GL_ARB_framebuffer_object"))
 
-   ;; enable alpha blending
-   (opengl:gl:Enable gl:+blend+)
-   (opengl:gl:BlendFunc gl:+src-alpha+ gl:+one-minus-src-alpha+ )
+		    ;; enable alpha blending
+		    (opengl:gl:Enable gl:+blend+)
+		    (opengl:gl:BlendFunc gl:+src-alpha+ gl:+one-minus-src-alpha+ )
 
-   (set-box! program1 (compile-shaders! (unbox *v1*) (unbox *fragment*)))
-   (set-box! program2 (compile-shaders! (unbox *v2*) (unbox *fragment*)))
-   (set-box! program3 (compile-shaders! (unbox *v3*) (unbox *fragment*)))
+		    (set-box! program1 (compile-shaders! (unbox *v1*) (unbox *fragment*)))
+		    (set-box! program2 (compile-shaders! (unbox *v2*) (unbox *fragment*)))
+		    (set-box! program3 (compile-shaders! (unbox *v3*) (unbox *fragment-constant*)))
+		    (set-box! program-line (compile-shaders! (unbox *vertex-line*) (unbox *fragment-line*)))
 
-   ;; create vertex array object for mesh
-   (mesh-make-vao! circle-mesh `((position . ,(gl:get-attrib-location (box-ref program1) "position"))
-				 (color . ,(gl:get-attrib-location (box-ref program1) "color"))))
+		    ;; create vertex array object for mesh
+		    (mesh-make-vao! circle-mesh `((position . ,(gl:get-attrib-location (box-ref program1) "position"))
+						  (color . ,(gl:get-attrib-location (box-ref program1) "color"))))
 
-   (let loop ([i 0]
-	      [t (current-milliseconds)])
-     (REPL) ; process repl event
-     (cp-space-step (unbox the-space) 1/60 ) ;; TODO use delta time
-     ;(cp-space-step (unbox the-space) 1/60 ) ;; TODO use delta time
-     ;(cp-space-step (unbox the-space) 1/60 ) ;; TODO use delta time
-     (let* ([p (screen->world (unbox the-mouse-pos))]
-	    [mouse-x (f32vector-ref p 0)]
-	    [mouse-y (f32vector-ref p 1)])
-       (cp-body-set-position (alist-ref 'body (unbox the-mouse-ball))
-			     (cp-v mouse-x mouse-y)))
+		    (mesh-make-vao! rectangle-mesh `((position . ,(gl:get-attrib-location (box-ref program1) "position"))
+						     (color . ,(gl:get-attrib-location (box-ref program1) "color"))))
 
-     (glfw:swap-buffers (glfw:window))
-     (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
-     (render (box-ref the-nodes))
-     (glfw:poll-events) ; Because of the context version, initializing GLEW results in a harmless invalid enum
-     (thread-yield!)
-     (unless (glfw:window-should-close (glfw:window))
-       (if (eq? 0 (% i 100))
-	 (let ([dt (- (current-milliseconds) t)])
-	   (display (/ 1000 dt)) (newline)))
-       (loop (+ 1 i) (current-milliseconds))))))
+		    (mesh-make-vao! the-line-mesh `((position . ,(gl:get-attrib-location (box-ref program-line) "position"))
+						    (color . ,(gl:get-attrib-location (box-ref program-line) "color")))
+				    #:stream)
+
+
+		    (let loop ([i 0]
+			       [t (current-milliseconds)])
+		      (REPL) ; process repl event
+		      (cp-space-step (unbox the-space) 1/60 ) ;; TODO use delta time
+					;(cp-space-step (unbox the-space) 1/60 ) ;; TODO use delta time
+					;(cp-space-step (unbox the-space) 1/60 ) ;; TODO use delta time
+		      (let* ([p (screen->world (unbox the-mouse-pos))]
+			     [mouse-x (f32vector-ref p 0)]
+			     [mouse-y (f32vector-ref p 1)])
+			(cp-body-set-position (alist-ref 'body (unbox the-mouse-ball))
+					      (cp-v mouse-x mouse-y)))
+
+		      (glfw:swap-buffers (glfw:window))
+		      (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
+		      (render (box-ref the-nodes))
+		      (glfw:poll-events) ; Because of the context version, initializing GLEW results in a harmless invalid enum
+		      (thread-yield!)
+		      (unless (glfw:window-should-close (glfw:window))
+			(if (eq? 0 (% i 100))
+			    (let ([dt (- (current-milliseconds) t)])
+					;(display (/ 1000 dt)) (newline)
+			      #f
+			      ))
+			(loop (+ 1 i) (current-milliseconds))))))
 
 (define main-thread (thread-start! (make-thread main)))
 
 (define watcher-1 (watch-reload! "vertex-shaders/v1.glsl"
-			       (lambda (f)
-				 (when f
-				   (display "Updated") (display f) (newline)
-				   (box-set! *v1* (read-all f))
-				   (set-box! program1 (compile-shaders! (read-all f) (unbox *fragment*)))
-				   (read-all f)
-				   (newline)))))
+				 (lambda (f)
+				   (when f
+				     (display "Updated") (display f) (newline)
+				     (box-set! *v1* (read-all f))
+				     (set-box! program1 (compile-shaders! (read-all f) (unbox *fragment*)))
+				     (read-all f)
+				     (newline)))))
 
 (define watcher-2 (watch-reload! "vertex-shaders/v1.glsl"
-			       (lambda (f)
-				 (when f
-				   (display "Updated") (display f) (newline)
-				   (box-set! *v2* (read-all f))
-				   (set-box! program2 (compile-shaders! (read-all f) (unbox *fragment*) ))
-				   (read-all f)
-				   (newline)))))
+				 (lambda (f)
+				   (when f
+				     (display "Updated") (display f) (newline)
+				     (box-set! *v2* (read-all f))
+				     (set-box! program2 (compile-shaders! (read-all f) (unbox *fragment*) ))
+				     (read-all f)
+				     (newline)))))
 
-(define watcher-3 (watch-reload! "vertex-shaders/v1.glsl"
-			       (lambda (f)
-				 (when f
-				   (display "Updated") (display f) (newline)
-				   (box-set! *v3* (read-all f))
-				   (set-box! program3 (compile-shaders! (read-all f) (unbox *fragment*) ))
-				   (read-all f)
-				   (newline)))))
+(define watcher-3 (watch-reload! "vertex-shaders/v3.glsl"
+				 (lambda (f)
+				   (when f
+				     (display "Updated") (display f) (newline)
+				     (box-set! *v3* (read-all f))
+				     (set-box! program3 (compile-shaders! (read-all f) (unbox *fragment-constant*) ))
+				     (read-all f)
+				     (newline)))))
 
 (define watcher-4 (watch-reload! "fragment-shaders/simple.glsl"
-			       (lambda (f)
-				 (when f
-				   (display "Updated") (display f) (newline)
-				   (box-set! *fragment* (read-all f))
-				   (set-box! program1 (compile-shaders! (unbox *v1*) (unbox *fragment*) ))
-				   (set-box! program2 (compile-shaders! (unbox *v2*) (unbox *fragment*) ))
-				   (set-box! program3 (compile-shaders! (unbox *v3*) (unbox *fragment*) ))
-				   (read-all f)
-				   (newline)))))
+				 (lambda (f)
+				   (when f
+				     (display "Updated") (display f) (newline)
+				     (box-set! *fragment* (read-all f))
+				     (set-box! program1 (compile-shaders! (unbox *v1*) (unbox *fragment*) ))
+				     (set-box! program2 (compile-shaders! (unbox *v2*) (unbox *fragment*) ))
+					;(set-box! program3 (compile-shaders! (unbox *v3*) (unbox *fragment*) ))
+				     (read-all f)
+				     (newline)))))
 
-;(thread-join! main-thread)
+(define watcher-5 (watch-reload! "fragment-shaders/constant.glsl"
+				 (lambda (f)
+				   (when f
+				     (display "Updated") (display f) (newline)
+				     (box-set! *fragment-constant* (read-all f))
+					;(set-box! program1 (compile-shaders! (unbox *v1*) (unbox *fragment*) ))
+					;(set-box! program2 (compile-shaders! (unbox *v2*) (unbox *fragment*) ))
+				     (set-box! program3 (compile-shaders! (unbox *v3*) (unbox *fragment-constant*) ))
+				     (newline)))))
 
-;(main)
+(define watcher-7 (watch-reload! "vertex-shaders/line.glsl"
+				 (lambda (f)
+				   (when f
+				     (display "Updated") (display f) (newline)
+				     (box-set! *vertex-line* (read-all f))
+					;(set-box! program1 (compile-shaders! (unbox *v1*) (unbox *fragment*) ))
+					;(set-box! program2 (compile-shaders! (unbox *v2*) (unbox *fragment*) ))
+				     (set-box! program-line (compile-shaders! (unbox *vertex-line*) (unbox *fragment-line*) ))
+				     (newline)))))
+(define watcher-7 (watch-reload! "fragment-shaders/line.glsl"
+				 (lambda (f)
+				   (when f
+				     (display "Updated") (display f) (newline)
+				     (box-set! *fragment-line* (read-all f))
+					;(set-box! program1 (compile-shaders! (unbox *v1*) (unbox *fragment*) ))
+					;(set-box! program2 (compile-shaders! (unbox *v2*) (unbox *fragment*) ))
+				     (set-box! program-line (compile-shaders! (unbox *vertex-line*) (unbox *fragment-line*) ))
+				     (newline)))))
+
+
+					;(thread-join! main-thread)
+
+					;(main)

@@ -31,3 +31,21 @@
       [(h . t) (if (eq? n i)
 		   h
 		   (loop (inc i) t))])))
+
+(define-syntax comment
+  (syntax-rules ()
+    [(comment expr ...)
+     #f]))
+
+(define-syntax ./trace
+  (syntax-rules ()
+    [(_ a ...)
+     (let ([name-to-val (map cons (list 'a ...) (list a ...))])
+       (printf "---- TRACE: ---- \n" )
+       (for-each
+	(lambda (x)
+	  (printf " ~s : ~s\n" (car x) (cdr x))
+	  )
+	name-to-val)
+       (printf "---------------- \n" )
+       (cdr (last name-to-val)))]))
