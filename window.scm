@@ -36,25 +36,25 @@
     ;; compile shader, set program parameter using
     (make-program (list vertex-shader-id fragment-shader-id))))
 
-(define program1 (make-box #f))
-(define program2 (make-box #f))
-(define program3 (make-box #f))
-(define program-line (make-box #f))
+(define -file-v1-  (file-cell "vertex-shaders/v1.glsl"))
+(define -file-v2-  (file-cell "vertex-shaders/v2.glsl"))
+(define -file-v3-  (file-cell "vertex-shaders/v3.glsl"))
+(define -file-vline-  (file-cell "vertex-shaders/line.glsl"))
 
-(define *v1* (box (read-all "vertex-shaders/v1.glsl")))
-(define *v2* (box (read-all "vertex-shaders/v2.glsl")))
-(define *v3* (box (read-all "vertex-shaders/v3.glsl")))
+(define *v1* (create-cell read-all -file-v1-))
+(define *v2* (create-cell read-all -file-v2-))
+(define *v3* (create-cell read-all -file-v3-))
+(define *vline* (create-cell read-all -file-vline-))
 
-(define vertex-identity
-  (create-cell read-all "vertex-shaders/v3.glsl")
+(define *fragment* (create-cell read-all (file-cell "fragment-shaders/simple.glsl")))
+(define *fragment-constant* (create-cell read-all (file-cell "fragment-shaders/constant.glsl")))
+(define *fragment-line* (create-cell read-all (file-cell "fragment-shaders/line.glsl")))
 
-  )
-(define *vertex-line* (box (read-all "vertex-shaders/line.glsl")))
-
-(define *fragment* (box (read-all "fragment-shaders/simple.glsl")))
-
-(define *fragment-constant* (box (read-all "fragment-shaders/constant.glsl")))
-(define *fragment-line* (box (read-all "fragment-shaders/line.glsl")))
+;; paused as compile-shader can only be used after gl is initialized
+(define program1     (create-paused-cell compile-shaders! *v1* *fragment*))
+(define program2     (create-paused-cell compile-shaders! *v2* *fragment*))
+(define program3     (create-paused-cell compile-shaders! *v3* *fragment-constant*))
+(define program-line (create-paused-cell compile-shaders! *vline* *fragment-line*))
 
 (define (ball->node idx ball)
   (let* ([body (alist-ref 'body ball)])
@@ -62,7 +62,7 @@
 		 (let ([angle (- (cp-body-get-angle body))]
 		       [body-pos (cp-body-get-position body)])
 		   (render-mesh circle-mesh
-				(unbox program1)
+				(cell-get program1)
 				(m* projection-matrix
 				    (m* (translation (make-point (cp-v.x body-pos)
 								 (- (cp-v.y body-pos))
@@ -86,7 +86,7 @@
   )
 
 
-					;(for-each (lambda (s) (cp-shape-set-friction s 0.)) (cp-space-shapes (unbox the-space)))
+					;(for-each (lambda (s) (cp-shape-set-friction s 0.)) (cp-space-shapes (cell-get the-space)))
 
 (define (add-ball space x y #!key (elasticity 0.95) (friction 0.2) (mass 1.) (radius 0.1))
   (let* ((moment (cp-moment-for-circle mass 0. radius cp-vzero))
@@ -198,7 +198,7 @@
 				      (- (cp-v.y body-pos))
 				      0)])
 	      (render-mesh circle-mesh
-			   (unbox program3)
+			   (cell-get program3)
 
 			   (m* projection-matrix
 			       (m* (translation trans)
@@ -225,7 +225,7 @@
 							      (cp-v.x pos-b) (- (cp-v.y pos-b))))
 
 	      (render-mesh the-line-mesh
-			   (unbox program-line)
+			   (cell-get program-line)
 			   (m* projection-matrix
 			       (m* view-matrix
 				   (model-matrix)))
@@ -557,20 +557,20 @@
 		    (opengl:gl:Enable gl:+blend+)
 		    (opengl:gl:BlendFunc gl:+src-alpha+ gl:+one-minus-src-alpha+ )
 
-		    (set-box! program1 (compile-shaders! (unbox *v1*) (unbox *fragment*)))
-		    (set-box! program2 (compile-shaders! (unbox *v2*) (unbox *fragment*)))
-		    (set-box! program3 (compile-shaders! (unbox *v3*) (unbox *fragment-constant*)))
-		    (set-box! program-line (compile-shaders! (unbox *vertex-line*) (unbox *fragment-line*)))
+		    (cell-unpause program1)
+		    (cell-unpause program2)
+		    (cell-unpause program3)
+		    (cell-unpause program-line)
 
 		    ;; create vertex array object for mesh
-		    (mesh-make-vao! circle-mesh `((position . ,(gl:get-attrib-location (box-ref program1) "position"))
-						  (color . ,(gl:get-attrib-location (box-ref program1) "color"))))
+		    (mesh-make-vao! circle-mesh `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
+						  (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
 
-		    (mesh-make-vao! rectangle-mesh `((position . ,(gl:get-attrib-location (box-ref program1) "position"))
-						     (color . ,(gl:get-attrib-location (box-ref program1) "color"))))
+		    (mesh-make-vao! rectangle-mesh `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
+						     (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
 
-		    (mesh-make-vao! the-line-mesh `((position . ,(gl:get-attrib-location (box-ref program-line) "position"))
-						    (color . ,(gl:get-attrib-location (box-ref program-line) "color")))
+		    (mesh-make-vao! the-line-mesh `((position . ,(gl:get-attrib-location (cell-get program-line) "position"))
+						    (color . ,(gl:get-attrib-location (cell-get program-line) "color")))
 				    #:stream)
 
 
@@ -600,74 +600,6 @@
 			(loop (+ 1 i) (current-milliseconds))))))
 
 (define main-thread (thread-start! (make-thread main)))
-
-(define watcher-1 (watch-reload! "vertex-shaders/v1.glsl"
-				 (lambda (f)
-				   (when f
-				     (display "Updated") (display f) (newline)
-				     (box-set! *v1* (read-all f))
-				     (set-box! program1 (compile-shaders! (read-all f) (unbox *fragment*)))
-				     (read-all f)
-				     (newline)))))
-
-(define watcher-2 (watch-reload! "vertex-shaders/v1.glsl"
-				 (lambda (f)
-				   (when f
-				     (display "Updated") (display f) (newline)
-				     (box-set! *v2* (read-all f))
-				     (set-box! program2 (compile-shaders! (read-all f) (unbox *fragment*) ))
-				     (read-all f)
-				     (newline)))))
-
-(define watcher-3 (watch-reload! "vertex-shaders/v3.glsl"
-				 (lambda (f)
-				   (when f
-				     (display "Updated") (display f) (newline)
-				     (box-set! *v3* (read-all f))
-				     (set-box! program3 (compile-shaders! (read-all f) (unbox *fragment-constant*) ))
-				     (read-all f)
-				     (newline)))))
-
-(define watcher-4 (watch-reload! "fragment-shaders/simple.glsl"
-				 (lambda (f)
-				   (when f
-				     (display "Updated") (display f) (newline)
-				     (box-set! *fragment* (read-all f))
-				     (set-box! program1 (compile-shaders! (unbox *v1*) (unbox *fragment*) ))
-				     (set-box! program2 (compile-shaders! (unbox *v2*) (unbox *fragment*) ))
-					;(set-box! program3 (compile-shaders! (unbox *v3*) (unbox *fragment*) ))
-				     (read-all f)
-				     (newline)))))
-
-(define watcher-5 (watch-reload! "fragment-shaders/constant.glsl"
-				 (lambda (f)
-				   (when f
-				     (display "Updated") (display f) (newline)
-				     (box-set! *fragment-constant* (read-all f))
-					;(set-box! program1 (compile-shaders! (unbox *v1*) (unbox *fragment*) ))
-					;(set-box! program2 (compile-shaders! (unbox *v2*) (unbox *fragment*) ))
-				     (set-box! program3 (compile-shaders! (unbox *v3*) (unbox *fragment-constant*) ))
-				     (newline)))))
-
-(define watcher-7 (watch-reload! "vertex-shaders/line.glsl"
-				 (lambda (f)
-				   (when f
-				     (display "Updated") (display f) (newline)
-				     (box-set! *vertex-line* (read-all f))
-					;(set-box! program1 (compile-shaders! (unbox *v1*) (unbox *fragment*) ))
-					;(set-box! program2 (compile-shaders! (unbox *v2*) (unbox *fragment*) ))
-				     (set-box! program-line (compile-shaders! (unbox *vertex-line*) (unbox *fragment-line*) ))
-				     (newline)))))
-(define watcher-7 (watch-reload! "fragment-shaders/line.glsl"
-				 (lambda (f)
-				   (when f
-				     (display "Updated") (display f) (newline)
-				     (box-set! *fragment-line* (read-all f))
-					;(set-box! program1 (compile-shaders! (unbox *v1*) (unbox *fragment*) ))
-					;(set-box! program2 (compile-shaders! (unbox *v2*) (unbox *fragment*) ))
-				     (set-box! program-line (compile-shaders! (unbox *vertex-line*) (unbox *fragment-line*) ))
-				     (newline)))))
-
 
 					;(thread-join! main-thread)
 

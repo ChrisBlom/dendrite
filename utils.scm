@@ -1,3 +1,6 @@
+(import matchable)
+(use box)
+
 (define % modulo)
 
 (define (map-indexed f elems)
@@ -21,7 +24,7 @@
 
 (define (inc i) (+ 1 i))
 
-(import matchable)
+
 
 (define (nth list n)
   (let loop ([i 0]
@@ -52,30 +55,50 @@
 
 
 (define-record cell
-  value
+  box
   fn
   ins
-  outs)
+  outs
+  paused)
 
-(define (create-cell fn . args)
-  (let* ([ins (filter cell? args)]
-	 [cell (make-cell  'placeholder  'placeholder ins (list))]
 
-	 [update-fn (lambda () (cell-value-set!
-			   cell
-			   (if (eq? args '())
-			       fn
-			       (apply fn (map (lambda (x) (if (cell? x)
-							 (cell-value x)
-							 x))
-					      args)))))])
-    (cell-fn-set! cell update-fn)
-    ((cell-fn cell))
+(define (cell-get cell)
+  (unbox (cell-box cell)))
+
+(define (cell-update! cell)
+  (when (not (cell-paused cell))
+    ((cell-fn cell))))
+
+(define (create-cell* fn args #!key (paused #f))
+  (letrec* ([ins (filter cell? args)]
+
+	    [update-fn (lambda ()
+			 (box-set! (cell-box cell)
+				   (if (eq? args '())
+				       fn
+				       (apply fn (map (lambda (x) (if (cell? x)
+								 (cell-get x)
+								 x))
+						      args)))))]
+	    [cell (make-cell (make-box 'uninitialized-cell) update-fn ins (list) paused)])
+    (cell-update! cell)
+
     (for-each (lambda (in)
 		(cell-outs-set! in (cons cell (cell-outs in ))))
 	      ins)
+
     cell))
 
+(define (create-cell fn #!rest args)
+  (display args ) (newline)
+  (create-cell* fn args paused: #f))
+
+(define (create-paused-cell fn . args)
+  (create-cell* fn args paused: #t))
+
+(define (cell-unpause cell)
+  (cell-paused-set! cell #f)
+  (cell-update! cell))
 
 (define (recompute-dependents cell)
   (for-each (lambda (out)
@@ -85,20 +108,21 @@
 
 (define (cell-set! cell val)
   ;; TODO update
-  (cell-value-set! cell val)
+  (box-set! (cell-box cell) val)
   (recompute-dependents cell)
   cell)
 
-(let* ([a (create-cell 1)]
-       [b (create-cell 2)]
-       [c (create-cell 3)]
-       [d (create-cell 4)]
-       [e (create-cell 5)]
-       [f (create-cell + a b c d e)])
 
-  (list (cell-value f)
-	(cell-set! a 10)
-	(cell-value f)))
+;; (let* ([a (create-cell 1)]
+;;        [b (create-cell 2)]
+;;        [c (create-cell 3)]
+;;        [d (create-cell 4)]
+;;        [e (create-cell 5)]
+;;        [f (create-cell + a b c d e)])
+;;   (display
+;;    (list (cell-get f)
+;; 	 (cell-set! a 10)
+;; 	 (cell-get f))))
 
 
 (define (file-cell file)
@@ -121,9 +145,9 @@
   fcell)
 
 
-(define v1 (file-cell "vertex-shaders/v1.glsl"))
+;; (define v1 (file-cell "vertex-shaders/v1.glsl"))
 
-(define v1-string (create-cell read-all v1))
+;; (define v1-string (create-cell read-all v1))
 
 
 
