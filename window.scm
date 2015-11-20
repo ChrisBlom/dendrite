@@ -15,7 +15,8 @@
      prepl
      utils
      symbol-utils
-     posix)
+     posix
+     ringbuffer)
 
 ;;;;; Utils ;;;;;
 
@@ -43,6 +44,11 @@
 (define *v1* (box (read-all "vertex-shaders/v1.glsl")))
 (define *v2* (box (read-all "vertex-shaders/v2.glsl")))
 (define *v3* (box (read-all "vertex-shaders/v3.glsl")))
+
+(define vertex-identity
+  (create-cell read-all "vertex-shaders/v3.glsl")
+
+  )
 (define *vertex-line* (box (read-all "vertex-shaders/line.glsl")))
 
 (define *fragment* (box (read-all "fragment-shaders/simple.glsl")))
@@ -104,8 +110,7 @@
 
 (define the-mouse-ball (box #f))
 
-(load "ringbuffer.scm")
-(import ringbuffer)
+
 
 (define (circle-ring n)
   (let ([b (list->ringbuffer
@@ -140,18 +145,20 @@
 			 (doto (fixed-line-segment space (cp-v +5. -5.) (cp-v -5. -5.) radius: 0.4)
 			       (cp-shape-set-elasticity 0.95)))
 
-    (box-set! the-mouse-ball (add-ball space 0. 0. #:radius 1. #:friction 0.01))
+    (box-set! the-mouse-ball (add-ball space 10. 10. #:radius 1. #:friction 0.01))
 
     (box-set! the-space space)
 
     (box-set! the-balls (cons (unbox the-mouse-ball)
-			      (let ([n 200])
+			      (let ([n 300])
 				(map (lambda (i)
 				       (let ([angle (/ (* pi 2 i 8) n)]
-					     [radius (* 4 (/ i n))])
+					     [radius (* 2 (/ i n))])
 					 (add-ball space
 						   (* radius (sin angle))
-						   (* radius (cos angle)))))
+						   (* radius (cos angle))
+						   #:radius 0.05
+						   )))
 				     (range 0 n)))))
 
     (box-set! the-nodes (map-indexed ball->node (box-ref the-balls)))))
@@ -234,7 +241,7 @@
 		 [end-pos (cp-v (car end) (cdr end))]
 		 [center-pos (cp-vlerp start-pos end-pos 0.5)]
 		 [mass 0.3]
-		 [radius 0.2]
+		 [radius 0.3]
 		 [body-center (cp-body-new (cp-moment-for-segment mass start-pos end-pos radius) mass)]
 		 [shape (cp-circle-shape-new body-center radius cp-vzero)])
 	    (cp-body-set-position body-center center-pos)
@@ -251,7 +258,7 @@
 	      (shape . ,shape))))
 	(circle-ring 24))))
 
-(define the-damping 0.9999)
+(define the-damping 0.4)
 
 (define cs
   (append-map (lambda (offset)
@@ -296,8 +303,9 @@
 	 [il (/ 1 (length poss))]
 	 [center-pos (cp-v* (reduce cp-v+ (cp-v 0. 0.) poss) il)]
 	 [body-center (cp-body-new 10. 20.)]
-	 [radius 0.5]
+	 [radius 0.1]
 	 [shape (cp-circle-shape-new body-center radius cp-vzero)])
+
     (cp-body-set-position body-center center-pos)
     (cp-space-add-body (unbox the-space) body-center)
     (cp-space-add-shape (unbox the-space) shape)
@@ -413,7 +421,7 @@
 (define (model-matrix)
   (mat4-identity))
 
-(define circle-mesh (disk 4))
+(define circle-mesh (disk 20))
 
 (define rectangle-mesh rect)
 
@@ -462,7 +470,7 @@
                       [(and (eq? key glfw:+key-escape+) (eq? action glfw:+press+))
                        (glfw:set-window-should-close window #t)])))
 
-(define the-mouse-pos (box (cons 0 0)))
+(define the-mouse-pos (box (cons 10. 10.)))
 
 (define (screen->world xy)
   (let* ([x (car xy)]

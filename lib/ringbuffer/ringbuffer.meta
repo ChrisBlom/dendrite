@@ -1,0 +1,6 @@
+((author "Chris Blom")
+ (synopsis "ringbuffer")
+ (license "BSD")
+ (test-depends test)
+ (category data)
+ (files "ringbuffer.scm" "ringbuffer.setup"))

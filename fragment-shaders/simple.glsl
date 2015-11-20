@@ -10,7 +10,7 @@ void main(){
    float v = (0.5+sin(r*2)*0.3);
 
    float m = 1+c.a;
-   fragColor = vec4(c.b*m*9,
+   fragColor = vec4(c.b*m,
 		    c.r*m,
 		    c.g*m,
 		    //id*.015

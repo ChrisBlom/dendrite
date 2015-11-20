@@ -4,8 +4,6 @@
      srfi-4) ; vectors
 
 
-
-
 (define (damped-rotary-spring body-a body-b #!key angle (stiffness 40.) (damping 0.99))
   (damped-rotary-spring-new
    body-a

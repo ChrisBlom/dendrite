@@ -8,9 +8,9 @@ uniform float ENERGY;
 
 // FOOBAR
 void main(){
-   gl_Position = MVP * vec4(position, 0.0, 0.6);
-   float d =   (position.x * position.x) + (position.y * position.y) ;
-   float r = atan(position.x , position.y);
-   float v = 1;
-   c = vec4(v*2,v,v,1-d*20);
+   gl_Position = MVP * vec4(position, 0.0, .7);
+   float d =   sqrt((position.x * position.x) + (position.y * position.y) );
+   float v = 0.5;
+   float dd = max( sin(d*2+1)*.5+.5 ,0);
+   c = vec4(v*2,v,v,dd/4);
 }

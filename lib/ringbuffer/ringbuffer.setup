@@ -1,0 +1,11 @@
+;; -*- scheme -*-
+(compile -s
+         ringbuffer.scm
+         ;; build .import module
+         -J
+	 -vvvv)
+
+(compile -s ringbuffer.import.scm)
+
+(install-extension 'ringbuffer
+                   '("ringbuffer.so" "ringbuffer.import.so"))

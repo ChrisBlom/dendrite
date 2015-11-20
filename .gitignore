@@ -1,6 +1,4 @@
 /window
-/chipmunk.so
-/chipmunk
-/chipmunk.c
-chipmunk.o
 /window.c
+*.so
+*.o
