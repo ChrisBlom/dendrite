@@ -16,5 +16,6 @@ void main(){
 	    colormod.g,
 	    colormod.b,
 	    1);
+
    p = vec3(position.x , position.y,0);
 }
