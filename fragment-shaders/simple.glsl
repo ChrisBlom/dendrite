@@ -11,14 +11,11 @@ void main(){
 
    float edge = clamp(0.4-id*.05, 0 ,0.4);
    float radial = clamp(v*id*0.01 , 0 ,1);
-
-   float m = 1+c.a;
-   fragColor = vec4(c.b*m*.8,
-		    c.r*m*.8,
-		    c.g*m*.8,
-		    //id*.015
-		    //;
-		    (edge + radial)
+   float m = 0.4+c.a;
+   fragColor = vec4(c.b*(c.a/3+1)/2,
+		    c.r*(c.a/3+1)/2,
+		    c.g*(c.a/3+1)/2,
+		    (edge/2*m + radial)*2
 
 );
 
