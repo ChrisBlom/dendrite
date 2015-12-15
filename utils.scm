@@ -67,19 +67,24 @@
 
 (define (cell-update! cell)
   (when (not (cell-paused cell))
+    ;(display "Updated")
+    ;(display (cell-fn cell))
+    ;(newline)
     ((cell-fn cell))))
+
+
 
 (define (create-cell* fn args #!key (paused #f))
   (letrec* ([ins (filter cell? args)]
 
 	    [update-fn (lambda ()
-			 (box-set! (cell-box cell)
-				   (if (eq? args '())
-				       fn
-				       (apply fn (map (lambda (x) (if (cell? x)
-								 (cell-get x)
-								 x))
-						      args)))))]
+			 (let ([arg-vals (map (lambda (x) (if (cell? x) (cell-get x) x)) args)])
+			   (if (any (cut eq? 'uninitialized-cell <>) arg-vals)
+			       (print "Skipping update of cell with unitialized inputs")
+			       (box-set! (cell-box cell)
+					 (if (eq? args '())
+					     fn
+					     (apply fn arg-vals))))))]
 	    [cell (make-cell (make-box 'uninitialized-cell) update-fn ins (list) paused)])
     (cell-update! cell)
 
@@ -90,7 +95,6 @@
     cell))
 
 (define (create-cell fn #!rest args)
-  (display args ) (newline)
   (create-cell* fn args paused: #f))
 
 (define (create-paused-cell fn . args)
