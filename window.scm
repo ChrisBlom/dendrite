@@ -3,7 +3,7 @@
 (use (prefix glfw3 glfw:)
      (prefix opengl-glew gl:)
      (prefix gl opengl:)
-     (prefix chipmunk cp-)
+     (prefix chipmunk cp:)
      gl-math
      gl-utils
      srfi-4 ; vectors
@@ -28,7 +28,6 @@
 
 (when (unbound? 'REPL)
   (define REPL (make-prepl 1113)))
-
 
 (define (compile-shaders! vertex-string fragment-string)
   (let ([vertex-shader-id   (make-shader gl:+vertex-shader+ vertex-string)]
@@ -59,22 +58,21 @@
 (define (ball->node idx ball)
   (let* ([body (alist-ref 'body ball)])
     (make-node (lambda (node projection-matrix view-matrix)
-		 (let ([angle (- (cp-body-get-angle body))]
-		       [body-pos (cp-body-get-position body)])
+		 (let ([angle (- (cp:body-get-angle body))]
+		       [body-pos (cp:body-get-position body)])
 		   (render-mesh circle-mesh
 				(cell-get program1)
 				(m* projection-matrix
-				    (m* (translation (make-point (cp-v.x body-pos)
-								 (- (cp-v.y body-pos))
+				    (m* (translation (make-point (cp:v.x body-pos)
+								 (- (cp:v.y body-pos))
 								 0))
 					(m* view-matrix
 					    (rotate-z angle (model-matrix)))))
-				(cp-vlength (cp-body-get-velocity body))
+				(cp:vlength (cp:body-get-velocity body))
 				(vector
 				 1
 				 (+ 0.5 (* 0.5 (sin idx)))
 				 (+ 0.5 (* 0.5 (cos idx))))))))))
-
 
 ;;;;; Physics ;;;;;
 
@@ -82,35 +80,32 @@
 (define the-space (box #f))
 
 (define-record node
-  render-fn ; takes node , mvp ,
-  )
-
-
-					;(for-each (lambda (s) (cp-shape-set-friction s 0.)) (cp-space-shapes (cell-get the-space)))
+  render-fn) ; takes node , mvp ,
+  
 
 (define (add-ball space x y #!key (elasticity 0.95) (friction 0.2) (mass 1.) (radius 0.1))
-  (let* ((moment (cp-moment-for-circle mass 0. radius cp-vzero))
-	 (body (cp-space-add-body space (cp-body-new  mass moment)))
-	 (shape (cp-circle-shape-new body radius cp-vzero)))
-    (cp-shape-set-friction shape friction)
-    (cp-shape-set-elasticity shape elasticity)
-    (cp-body-set-position body (cp-v (exact->inexact x)
+  (let* ((moment (cp:moment-for-circle mass 0. radius cp:vzero))
+	 (body (cp:space-add-body space (cp:body-new  mass moment)))
+	 (shape (cp:circle-shape-new body radius cp:vzero)))
+
+    (cp:shape-set-friction shape friction)
+    (cp:shape-set-elasticity shape elasticity)
+
+    (cp:body-set-position body (cp:v (exact->inexact x)
 				     (exact->inexact y)))
-    (cp-space-add-shape space shape)
+    (cp:space-add-shape space shape)
     (list
      (cons 'body  body)
      (cons 'shape shape))))
 
 (define (fixed-line-segment space from to #!key (radius 0.1))
-  (cp-segment-shape-new (cp-space-get-static-body space) from to radius))
+  (cp:segment-shape-new (cp:space-get-static-body space) from to radius))
 
 (define the-balls (box #f))
 
 (define the-nodes (box (list)))
 
 (define the-mouse-ball (box #f))
-
-
 
 (define (circle-ring n)
   (let ([b (list->ringbuffer
@@ -130,20 +125,20 @@
 
 
 (define (init-physics)
-  (let ([space (cp-space-new)])
+  (let ([space (cp:space-new)])
 
-    (cp-space-set-iterations space 30) ; 10 default
+    (cp:space-set-iterations space 30) ; 10 default
 
     ;; walls
-    (cp-space-add-shapes space
-			 (doto (fixed-line-segment space (cp-v -5. -5.) (cp-v -5. +5.) radius: 0.4)
-			       (cp-shape-set-elasticity 0.95))
-			 (doto (fixed-line-segment space (cp-v -5. +5.) (cp-v +5. +5.) radius: 0.4)
-			       (cp-shape-set-elasticity 0.95))
-			 (doto (fixed-line-segment space (cp-v +5. +5.) (cp-v +5. -5.) radius: 0.4)
-			       (cp-shape-set-elasticity 0.95))
-			 (doto (fixed-line-segment space (cp-v +5. -5.) (cp-v -5. -5.) radius: 0.4)
-			       (cp-shape-set-elasticity 0.95)))
+    (cp:space-add-shapes space
+			 (doto (fixed-line-segment space (cp:v -5. -5.) (cp:v -5. +5.) radius: 0.4)
+			       (cp:shape-set-elasticity 0.95))
+			 (doto (fixed-line-segment space (cp:v -5. +5.) (cp:v +5. +5.) radius: 0.4)
+			       (cp:shape-set-elasticity 0.95))
+			 (doto (fixed-line-segment space (cp:v +5. +5.) (cp:v +5. -5.) radius: 0.4)
+			       (cp:shape-set-elasticity 0.95))
+			 (doto (fixed-line-segment space (cp:v +5. -5.) (cp:v -5. -5.) radius: 0.4)
+			       (cp:shape-set-elasticity 0.95)))
 
     (box-set! the-mouse-ball (add-ball space 10. 10. #:radius 1. #:friction 0.01))
 
@@ -157,7 +152,7 @@
 					 (add-ball space
 						   (* radius (sin angle))
 						   (* radius (cos angle))
-						   #:radius 0.05
+						   #:radius 0.1
 						   )))
 				     (range 0 n)))))
 
@@ -167,14 +162,14 @@
 
 
 (define (damped-spring body-a body-b #!key length (stiffness 40.) (damping 0.99) anchor-a anchor-b)
-  (let ([c  (cp-damped-spring-new
+  (let ([c  (cp:damped-spring-new
 	     (./trace body-a)
 	     (./trace body-b)
-	     (./trace (or anchor-a cp-v0))
-	     (./trace (or anchor-b cp-v0))
-	     (./trace (or length (cp-vdist
-				  (cp-body-get-position body-a)
-				  (cp-body-get-position body-b))) )
+	     (./trace (or anchor-a cp:v0))
+	     (./trace (or anchor-b cp:v0))
+	     (./trace (or length (cp:vdist
+				  (cp:body-get-position body-a)
+				  (cp:body-get-position body-b))) )
 	     (./trace stiffness)
 	     (./trace damping))])
     (./trace c)
@@ -189,13 +184,13 @@
 (box-set! render-circle-shape
 	  (lambda (projection-matrix view-matrix segment )
 	    (let* (
-		   [body (cp-shape-get-body segment)]
-					;[pos-a (cp-segment-shape-get-a segment)]
-					;		   [pos-b (cp-segment-shape-get-b segment)]
-		   [angle (+ (/ pi 4) (- (cp-body-get-angle body)))]
-		   [body-pos (cp-body-get-position body)]
-		   [trans (make-point (cp-v.x body-pos)
-				      (- (cp-v.y body-pos))
+		   [body (cp:shape-get-body segment)]
+					;[pos-a (cp:segment-shape-get-a segment)]
+					;		   [pos-b (cp:segment-shape-get-b segment)]
+		   [angle (+ (/ pi 4) (- (cp:body-get-angle body)))]
+		   [body-pos (cp:body-get-position body)]
+		   [trans (make-point (cp:v.x body-pos)
+				      (- (cp:v.y body-pos))
 				      0)])
 	      (render-mesh circle-mesh
 			   (cell-get program3)
@@ -205,31 +200,31 @@
 				   (m* view-matrix
 				       (rotate-z angle (model-matrix)))))
 
-			   (cp-vlength (cp-body-get-velocity body))
+			   (cp:vlength (cp:body-get-velocity body))
 
 			   (vector 1 1 0)))))
 
 (box-set! *render-constraint*
-	  (lambda (projection-matrix view-matrix constraint )
-	    (let* ([pos-a (cp-body-get-position (cp-constraint-get-body-a constraint))]
-		   [pos-b (cp-body-get-position (cp-constraint-get-body-b constraint))]
-		   [angle (cp-vtoangle (cp-v- pos-a pos-b))]
-		   [middle (cp-vlerp pos-a pos-b 0.5)]
-		   [trans (make-point (cp-v.x middle)
-				      (- (cp-v.y  middle))
+	  (lambda (projection-matrix view-matrix constraint)
+	    (let* ([pos-a (cp:body-get-position (cp:constraint-get-body-a constraint))]
+		   [pos-b (cp:body-get-position (cp:constraint-get-body-b constraint))]
+		   [angle (cp:vtoangle (cp:v- pos-a pos-b))]
+		   [middle (cp:vlerp pos-a pos-b 0.5)]
+		   [trans (make-point (cp:v.x middle)
+				      (- (cp:v.y  middle))
 				      0.)]
 		   )
 
 
-	      (mesh-update! the-line-mesh (line-mesh-vertices (cp-v.x pos-a) (- (cp-v.y pos-a))
-							      (cp-v.x pos-b) (- (cp-v.y pos-b))))
+	      (mesh-update! the-line-mesh (line-mesh-vertices (cp:v.x pos-a) (- (cp:v.y pos-a))
+							      (cp:v.x pos-b) (- (cp:v.y pos-b))))
 
 	      (render-mesh the-line-mesh
 			   (cell-get program-line)
 			   (m* projection-matrix
 			       (m* view-matrix
 				   (model-matrix)))
-			   (cp-constraint-get-impulse constraint)
+			   (cp:constraint-get-impulse constraint)
 			   (vector 1 0 1)))))
 
 (define edges
@@ -237,16 +232,16 @@
    (map (lambda (x)
 	  (let* ([start (first x)]
 		 [end (second x)]
-		 [start-pos (cp-v (car start) (cdr start))]
-		 [end-pos (cp-v (car end) (cdr end))]
-		 [center-pos (cp-vlerp start-pos end-pos 0.5)]
+		 [start-pos (cp:v (car start) (cdr start))]
+		 [end-pos (cp:v (car end) (cdr end))]
+		 [center-pos (cp:vlerp start-pos end-pos 0.5)]
 		 [mass 0.3]
 		 [radius 0.3]
-		 [body-center (cp-body-new (cp-moment-for-segment mass start-pos end-pos radius) mass)]
-		 [shape (cp-circle-shape-new body-center radius cp-vzero)])
-	    (cp-body-set-position body-center center-pos)
-	    (cp-space-add-body (unbox the-space) body-center)
-	    (cp-space-add-shape (unbox the-space) shape)
+		 [body-center (cp:body-new (cp:moment-for-segment mass start-pos end-pos radius) mass)]
+		 [shape (cp:circle-shape-new body-center radius cp:vzero)])
+	    (cp:body-set-position body-center center-pos)
+	    (cp:space-add-body (unbox the-space) body-center)
+	    (cp:space-add-shape (unbox the-space) shape)
 	    (box-swap! the-nodes
 		       (cut cons
 			 (let* ([body body-center])
@@ -266,21 +261,21 @@
 					  [before (vector-ref edges (% (+ i offset) (vector-length edges)))]
 					  [body-current (alist-ref 'body-center current)]
 					  [body-before (alist-ref 'body-center before)]
-					  [constraint (cp-damped-spring-new
+					  [constraint (cp:damped-spring-new
 						       body-before
 						       body-current
-						       cp-v0
-						       cp-v0
-						       (cp-vlength (cp-v- (cp-body-get-position body-before)
-									  (cp-body-get-position body-current)))
+						       cp:v0
+						       cp:v0
+						       (cp:vlength (cp:v- (cp:body-get-position body-before)
+									  (cp:body-get-position body-current)))
 						       100.
 						       the-damping
 						       )]
-					  [rot-constraint (cp-damped-rotary-spring-new
+					  [rot-constraint (cp:damped-rotary-spring-new
 							   body-before
 							   body-current
-							   (cp-vtoangle (cp-v- (cp-body-get-position body-before)
-									       (cp-body-get-position body-current)))
+							   (cp:vtoangle (cp:v- (cp:body-get-position body-before)
+									       (cp:body-get-position body-current)))
 							   100.
 							   the-damping
 							   )])
@@ -295,20 +290,21 @@
 			    (range 0 (vector-length edges))))
 	      '(1 3 9 11)))
 
-(for-each (cut cp-space-add-constraint (unbox the-space) <>)  cs)
+
+(for-each (cut cp:space-add-constraint (unbox the-space) <>)  cs)
 
 (define rcs
-  (let* ([poss (map (lambda (x) (cp-body-get-position (alist-ref 'body-center x)))
+  (let* ([poss (map (lambda (x) (cp:body-get-position (alist-ref 'body-center x)))
 		    (vector->list edges))]
 	 [il (/ 1 (length poss))]
-	 [center-pos (cp-v* (reduce cp-v+ (cp-v 0. 0.) poss) il)]
-	 [body-center (cp-body-new 10. 20.)]
+	 [center-pos (cp:v* (reduce cp:v+ (cp:v 0. 0.) poss) il)]
+	 [body-center (cp:body-new 10. 20.)]
 	 [radius 0.1]
-	 [shape (cp-circle-shape-new body-center radius cp-vzero)])
+	 [shape (cp:circle-shape-new body-center radius cp:vzero)])
 
-    (cp-body-set-position body-center center-pos)
-    (cp-space-add-body (unbox the-space) body-center)
-    (cp-space-add-shape (unbox the-space) shape)
+    (cp:body-set-position body-center center-pos)
+    (cp:space-add-body (unbox the-space) body-center)
+    (cp:space-add-shape (unbox the-space) shape)
 
     (box-swap! the-nodes
 	       (cut cons
@@ -321,21 +317,21 @@
     (append-map (lambda (i) (let* ([current (vector-ref edges i)]
 			      [before (vector-ref edges (% (+ i 1) (vector-length edges)))]
 			      [body-current (alist-ref 'body-center current)]
-			      [constraint (cp-damped-spring-new
+			      [constraint (cp:damped-spring-new
 					   body-center
 					   body-current
-					   (cp-vlerp cp-v0 (cp-body-get-position body-center) 0.1)
-					   cp-v0
-					   (cp-vlength (cp-v- (cp-body-get-position body-center)
-							      (cp-body-get-position body-current)))
+					   (cp:vlerp cp:v0 (cp:body-get-position body-center) 0.1)
+					   cp:v0
+					   (cp:vlength (cp:v- (cp:body-get-position body-center)
+							      (cp:body-get-position body-current)))
 					   100.
 					   the-damping
 					   )]
-			      [rot-constraint (cp-damped-rotary-spring-new
+			      [rot-constraint (cp:damped-rotary-spring-new
 					       body-center
 					       body-current
-					       (cp-vtoangle (cp-v- (cp-body-get-position body-center)
-								   (cp-body-get-position body-current)))
+					       (cp:vtoangle (cp:v- (cp:body-get-position body-center)
+								   (cp:body-get-position body-current)))
 					       100.
 					       the-damping
 					       )])
@@ -351,18 +347,18 @@
 			 ))
 		(range 0 (vector-length edges)))))
 
-(for-each (cut cp-space-add-constraint (unbox the-space) <>)  rcs)
+(for-each (cut cp:space-add-constraint (unbox the-space) <>)  rcs)
 
 
 
 ;; (for-each
-;;  (cut cp-shape-set-elasticity <> 0.1)
-;;  (cp-space-shapes (unbox the-space)))
+;;  (cut cp:shape-set-elasticity <> 0.1)
+;;  (cp:space-shapes (unbox the-space)))
 
-;; (cp-space-bodies the-space)
+;; (cp:space-bodies the-space)
 
 (define (clear-space space)
-  (for-each (cut cp-space-remove-body the-space <>) (cp-space-bodies the-space)))
+  (for-each (cut cp:space-remove-body the-space <>) (cp:space-bodies the-space)))
 
 ;;;;; Graphics ;;;;;
 (define (watch-reload! file on-change)
@@ -465,7 +461,7 @@
 
 ;;
 (glfw:key-callback (lambda (window key scancode action mods)
-		     (display (list 'key= key scancode action mods)) (newline)
+		     ;(display (list 'key= key scancode action mods)) (newline)
                      (cond
                       [(and (eq? key glfw:+key-escape+) (eq? action glfw:+press+))
                        (glfw:set-window-should-close window #t)])))
@@ -493,8 +489,8 @@
 
 (define (set-gravity)
   (let ([v (screen->world (unbox the-mouse-pos))])
-    (cp-space-set-gravity (unbox the-space)
-			  (cp-v (f32vector-ref v 0)
+    (cp:space-set-gravity (unbox the-space)
+			  (cp:v (f32vector-ref v 0)
 				(f32vector-ref v 1)))))
 
 
@@ -577,14 +573,14 @@
 		    (let loop ([i 0]
 			       [t (current-milliseconds)])
 		      (REPL) ; process repl event
-		      (cp-space-step (unbox the-space) 1/60 ) ;; TODO use delta time
-					;(cp-space-step (unbox the-space) 1/60 ) ;; TODO use delta time
-					;(cp-space-step (unbox the-space) 1/60 ) ;; TODO use delta time
+		      (cp:space-step (unbox the-space) 1/60 ) ;; TODO use delta time
+					;(cp:space-step (unbox the-space) 1/60 ) ;; TODO use delta time
+					;(cp:space-step (unbox the-space) 1/60 ) ;; TODO use delta time
 		      (let* ([p (screen->world (unbox the-mouse-pos))]
 			     [mouse-x (f32vector-ref p 0)]
 			     [mouse-y (f32vector-ref p 1)])
-			(cp-body-set-position (alist-ref 'body (unbox the-mouse-ball))
-					      (cp-v mouse-x mouse-y)))
+			(cp:body-set-position (alist-ref 'body (unbox the-mouse-ball))
+					      (cp:v mouse-x mouse-y)))
 
 		      (glfw:swap-buffers (glfw:window))
 		      (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
@@ -604,3 +600,27 @@
 					;(thread-join! main-thread)
 
 					;(main)
+
+(require-extension apropos)
+(require-extension chicken-doc)
+(require-extension parley)
+(require-extension parley-auto-completion)
+
+(define exit? (make-parameter #f))
+
+(define (shell-repl)
+  (if (exit?)
+      #t
+      (begin (handle-exceptions
+	      exn
+	      (begin (print-error-message exn)
+		     (display (with-output-to-string (lambda () (print-call-chain)))))
+	      (let ((x (with-input-from-string (parley ((repl-prompt))) (lambda () (read)))))
+		(write (eval x))
+                ;(line-num (+ (line-num) 1))
+		))
+	     (newline)
+	     (shell-repl))))
+
+(when (not (feature? 'csi))
+  (shell-repl))
