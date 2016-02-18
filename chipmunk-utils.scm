@@ -27,3 +27,17 @@
    [(eq? #\x1 (cp-constraint-is-rotary-limit-joint    x)) 'rotary-limit-joint]
    [(eq? #\x1 (cp-constraint-is-simple-motor          x)) 'simple-motor]
    [(eq? #\x1 (cp-constraint-is-slide-joint           x)) 'slide-joint]))
+
+(define (damped-spring body-a body-b #!key length (stiffness 40.) (damping 0.99) anchor-a anchor-b)
+  (let ([c  (cp:damped-spring-new
+	     (./trace body-a)
+	     (./trace body-b)
+	     (./trace (or anchor-a cp:v0))
+	     (./trace (or anchor-b cp:v0))
+	     (./trace (or length (cp:vdist
+				  (cp:body-get-position body-a)
+				  (cp:body-get-position body-b))) )
+	     (./trace stiffness)
+	     (./trace damping))])
+    (./trace c)
+    ))

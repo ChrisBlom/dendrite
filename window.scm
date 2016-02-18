@@ -27,7 +27,7 @@
 (define the-line-mesh (line-mesh '(0 0) '(0 0)))
 
 (when (unbound? 'REPL)
-  (define REPL (make-prepl 1113)))
+  (define REPL (make-prepl 1114)))
 
 (define (compile-shaders! vertex-string fragment-string)
   (let ([vertex-shader-id   (make-shader gl:+vertex-shader+ vertex-string)]
@@ -57,7 +57,7 @@
 
 (define (ball->node idx ball)
   (let* ([body (alist-ref 'body ball)])
-    (make-node (lambda (node projection-matrix view-matrix)
+    (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
 		 (let ([angle (- (cp:body-get-angle body))]
 		       [body-pos (cp:body-get-position body)])
 		   (render-mesh circle-mesh
@@ -77,11 +77,17 @@
 ;;;;; Physics ;;;;;
 
 ;; TODO perform physics in a separate thread
-(define the-space (box #f))
+(define the-space #f)
 
-(define-record node
-  render-fn) ; takes node , mvp ,
-  
+(define-record node render-fn children matrix) ; takes node , mvp ,
+
+(define (new-node render-fn)
+  (make-node render-fn
+	     '()
+	     (mat4-identity)))
+
+(define (node-children-update! node f . args)
+  (node-children-set! node (apply f (node-children node) args)))
 
 (define (add-ball space x y #!key (elasticity 0.95) (friction 0.2) (mass 1.) (radius 0.1))
   (let* ((moment (cp:moment-for-circle mass 0. radius cp:vzero))
@@ -101,28 +107,25 @@
 (define (fixed-line-segment space from to #!key (radius 0.1))
   (cp:segment-shape-new (cp:space-get-static-body space) from to radius))
 
+;;;; Global State
+
 (define the-balls (box #f))
 
 (define the-nodes (box (list)))
 
 (define the-mouse-ball (box #f))
 
+;;;; Scene Setup
+
 (define (circle-ring n)
   (let ([b (list->ringbuffer
-	    (map (lambda (i)
-		   (let ([angle (* i (/ n) pi 2)])
-		     (cons (* 2 (sin angle))
-			   (* 2 (cos angle)))))
-		 (range 0 n)))])
-    (map (lambda (j)
-	   `( ,(ringbuffer-get b j)
-	      ,(ringbuffer-get b (+ 1 j))))
-	 (range 0 n))))
-
-;;   ==== end> 0 <start =========body========= end> 0 <start ====
-
-
-
+	    (list-ec (:range i 0 n)
+		     (let ([angle (* i (/ n) pi 2)])
+		       (cons (* 2 (sin angle))
+			     (* 2 (cos angle))))))])
+    (list-ec (:range j 0 n)
+	     `(,(ringbuffer-get b j)
+	       ,(ringbuffer-get b (+ 1 j))))))
 
 (define (init-physics)
   (let ([space (cp:space-new)])
@@ -142,44 +145,26 @@
 
     (box-set! the-mouse-ball (add-ball space 10. 10. #:radius 1. #:friction 0.01))
 
-    (box-set! the-space space)
 
     (box-set! the-balls (cons (unbox the-mouse-ball)
 			      (let ([n 300])
-				(map (lambda (i)
-				       (let ([angle (/ (* pi 2 i 8) n)]
-					     [radius (* 2 (/ i n))])
-					 (add-ball space
-						   (* radius (sin angle))
-						   (* radius (cos angle))
-						   #:radius 0.1
-						   )))
-				     (range 0 n)))))
+				(list-ec (:range i n)
+					 (let ([angle (/ (* pi 2 i 8) n)]
+					       [radius (* 2 (/ i n))])
+					   (add-ball space
+						     (* radius (sin angle))
+						     (* radius (cos angle))
+						     #:radius 0.1))))))
 
-    (box-set! the-nodes (map-indexed ball->node (box-ref the-balls)))))
+    (box-set! the-nodes (map-indexed ball->node (box-ref the-balls)))
 
-(init-physics)
+    ;; return space
+    space))
 
-
-(define (damped-spring body-a body-b #!key length (stiffness 40.) (damping 0.99) anchor-a anchor-b)
-  (let ([c  (cp:damped-spring-new
-	     (./trace body-a)
-	     (./trace body-b)
-	     (./trace (or anchor-a cp:v0))
-	     (./trace (or anchor-b cp:v0))
-	     (./trace (or length (cp:vdist
-				  (cp:body-get-position body-a)
-				  (cp:body-get-position body-b))) )
-	     (./trace stiffness)
-	     (./trace damping))])
-    (./trace c)
-    ))
-
-
+(set! the-space (init-physics))
 
 (define render-circle-shape (box #f))
 (define *render-constraint* (box #f))
-
 
 (box-set! render-circle-shape
 	  (lambda (projection-matrix view-matrix segment )
@@ -205,15 +190,13 @@
 			   (vector 1 1 0)))))
 
 (box-set! *render-constraint*
-	  (lambda (projection-matrix view-matrix constraint)
+	  (lambda (projection-matrix view-matrix ctx-matrix constraint)
 	    (let* ([pos-a (cp:body-get-position (cp:constraint-get-body-a constraint))]
 		   [pos-b (cp:body-get-position (cp:constraint-get-body-b constraint))]
 		   [angle (cp:vtoangle (cp:v- pos-a pos-b))]
 		   [middle (cp:vlerp pos-a pos-b 0.5)]
-		   [trans (make-point (cp:v.x middle)
-				      (- (cp:v.y  middle))
-				      0.)]
-		   )
+		   [trans (make-point (cp:v.x middle) (- (cp:v.y  middle))
+				      0.)])
 
 
 	      (mesh-update! the-line-mesh (line-mesh-vertices (cp:v.x pos-a) (- (cp:v.y pos-a))
@@ -221,77 +204,69 @@
 
 	      (render-mesh the-line-mesh
 			   (cell-get program-line)
-			   (m* projection-matrix
-			       (m* view-matrix
-				   (model-matrix)))
+			   (m* projection-matrix (m* view-matrix (model-matrix)))
 			   (cp:constraint-get-impulse constraint)
 			   (vector 1 0 1)))))
 
 (define edges
   (list->vector
-   (map (lambda (x)
-	  (let* ([start (first x)]
-		 [end (second x)]
-		 [start-pos (cp:v (car start) (cdr start))]
-		 [end-pos (cp:v (car end) (cdr end))]
-		 [center-pos (cp:vlerp start-pos end-pos 0.5)]
-		 [mass 0.3]
-		 [radius 0.3]
-		 [body-center (cp:body-new (cp:moment-for-segment mass start-pos end-pos radius) mass)]
-		 [shape (cp:circle-shape-new body-center radius cp:vzero)])
-	    (cp:body-set-position body-center center-pos)
-	    (cp:space-add-body (unbox the-space) body-center)
-	    (cp:space-add-shape (unbox the-space) shape)
-	    (box-swap! the-nodes
-		       (cut cons
-			 (let* ([body body-center])
-			   (make-node (lambda (node projection-matrix view-matrix )
-					((unbox render-circle-shape) projection-matrix view-matrix shape))))
-			 <>))
+   (list-ec (:list x (circle-ring 24))
+	    (let* ([start (first x)]
+		   [end (second x)]
+		   [start-pos (cp:v (car start) (cdr start))]
+		   [end-pos (cp:v (car end) (cdr end))]
+		   [center-pos (cp:vlerp start-pos end-pos 0.5)]
+		   [mass 0.3]
+		   [radius 0.3]
+		   [body-center (cp:body-new (cp:moment-for-segment mass start-pos end-pos radius) mass)]
+		   [shape (cp:circle-shape-new body-center radius cp:vzero)])
+	      (cp:body-set-position body-center center-pos)
+	      (cp:space-add-body the-space body-center)
+	      (cp:space-add-shape the-space shape)
+	      (box-swap! the-nodes
+			 (cut cons
+			   (let* ([body body-center])
+			     (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+					  ((unbox render-circle-shape) projection-matrix view-matrix shape))))
+			   <>))
 
-	    `((body-center . ,body-center)
-	      (shape . ,shape))))
-	(circle-ring 24))))
+	      `((body-center . ,body-center)
+		(shape . ,shape))))))
 
 (define the-damping 0.4)
 
-(define cs
-  (append-map (lambda (offset)
-		(append-map (lambda (i) (let* ([current (vector-ref edges i)]
-					  [before (vector-ref edges (% (+ i offset) (vector-length edges)))]
-					  [body-current (alist-ref 'body-center current)]
-					  [body-before (alist-ref 'body-center before)]
-					  [constraint (cp:damped-spring-new
-						       body-before
-						       body-current
-						       cp:v0
-						       cp:v0
-						       (cp:vlength (cp:v- (cp:body-get-position body-before)
-									  (cp:body-get-position body-current)))
-						       100.
-						       the-damping
-						       )]
-					  [rot-constraint (cp:damped-rotary-spring-new
-							   body-before
-							   body-current
-							   (cp:vtoangle (cp:v- (cp:body-get-position body-before)
-									       (cp:body-get-position body-current)))
-							   100.
-							   the-damping
-							   )])
-				     (box-swap! the-nodes
-						(cut append <>
-						     (list (make-node (lambda (node projection-matrix view-matrix )
-									((unbox *render-constraint*) projection-matrix view-matrix constraint)))
-							   (make-node (lambda (node projection-matrix view-matrix )
-									((unbox *render-constraint*) projection-matrix view-matrix rot-constraint))))))
-				     (list constraint rot-constraint)
-				     ))
-			    (range 0 (vector-length edges))))
-	      '(1 3 9 11)))
-
-
-(for-each (cut cp:space-add-constraint (unbox the-space) <>)  cs)
+(for-each (cut cp:space-add-constraint the-space <>)
+	  (append-ec (:list offset '(1 3 9 11))
+		     (:range i 0 (vector-length edges))
+		   (let* ([current (vector-ref edges i)]
+			  [before (vector-ref edges (% (+ i offset) (vector-length edges)))]
+			  [body-current (alist-ref 'body-center current)]
+			  [body-before (alist-ref 'body-center before)]
+			  [constraint (cp:damped-spring-new
+				       body-before
+				       body-current
+				       cp:v0
+				       cp:v0
+				       (cp:vlength (cp:v- (cp:body-get-position body-before)
+							  (cp:body-get-position body-current)))
+				       100.
+				       the-damping
+				       )]
+			  [rot-constraint (cp:damped-rotary-spring-new
+					   body-before
+					   body-current
+					   (cp:vtoangle (cp:v- (cp:body-get-position body-before)
+							       (cp:body-get-position body-current)))
+					   100.
+					   the-damping
+					   )])
+		     (box-swap! the-nodes
+				(cut append <>
+				     (list (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+							((unbox *render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+					   (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+							((unbox *render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint))))))
+		     (list constraint rot-constraint))))
 
 (define rcs
   (let* ([poss (map (lambda (x) (cp:body-get-position (alist-ref 'body-center x)))
@@ -303,101 +278,54 @@
 	 [shape (cp:circle-shape-new body-center radius cp:vzero)])
 
     (cp:body-set-position body-center center-pos)
-    (cp:space-add-body (unbox the-space) body-center)
-    (cp:space-add-shape (unbox the-space) shape)
+    (cp:space-add-body the-space body-center)
+    (cp:space-add-shape the-space shape)
 
     (box-swap! the-nodes
 	       (cut cons
 		 (let* ([body body-center])
-		   (make-node (lambda (node projection-matrix view-matrix )
+		   (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
 				((unbox render-circle-shape) projection-matrix view-matrix shape))))
 		 <>))
 
+    (append-ec (:range i 0 (vector-length edges))
+	       (let* ([current (vector-ref edges i)]
+		      [before (vector-ref edges (% (+ i 1) (vector-length edges)))]
+		      [body-current (alist-ref 'body-center current)]
+		      [constraint (cp:damped-spring-new
+				   body-center
+				   body-current
+				   (cp:vlerp cp:v0 (cp:body-get-position body-center) 0.1)
+				   cp:v0
+				   (cp:vlength (cp:v- (cp:body-get-position body-center)
+						      (cp:body-get-position body-current)))
+				   100.
+				   the-damping
+				   )]
+		      [rot-constraint (cp:damped-rotary-spring-new
+				       body-center
+				       body-current
+				       (cp:vtoangle (cp:v- (cp:body-get-position body-center)
+							   (cp:body-get-position body-current)))
+				       100.
+				       the-damping)])
+		 (box-swap! the-nodes
+			    (cut append <>
+				 (list (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+						   ((unbox *render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+				       (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+						   ((unbox *render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint))))
+				 ))
 
-    (append-map (lambda (i) (let* ([current (vector-ref edges i)]
-			      [before (vector-ref edges (% (+ i 1) (vector-length edges)))]
-			      [body-current (alist-ref 'body-center current)]
-			      [constraint (cp:damped-spring-new
-					   body-center
-					   body-current
-					   (cp:vlerp cp:v0 (cp:body-get-position body-center) 0.1)
-					   cp:v0
-					   (cp:vlength (cp:v- (cp:body-get-position body-center)
-							      (cp:body-get-position body-current)))
-					   100.
-					   the-damping
-					   )]
-			      [rot-constraint (cp:damped-rotary-spring-new
-					       body-center
-					       body-current
-					       (cp:vtoangle (cp:v- (cp:body-get-position body-center)
-								   (cp:body-get-position body-current)))
-					       100.
-					       the-damping
-					       )])
-			 (box-swap! the-nodes
-				    (cut append <>
-					 (list (make-node (lambda (node projection-matrix view-matrix )
-							    ((unbox *render-constraint*) projection-matrix view-matrix constraint)))
-					       (make-node (lambda (node projection-matrix view-matrix )
-							    ((unbox *render-constraint*) projection-matrix view-matrix rot-constraint))))
-					 ))
+		 (list constraint rot-constraint)
+		 ))))
 
-			 (list constraint rot-constraint)
-			 ))
-		(range 0 (vector-length edges)))))
-
-(for-each (cut cp:space-add-constraint (unbox the-space) <>)  rcs)
-
-
-
-;; (for-each
-;;  (cut cp:shape-set-elasticity <> 0.1)
-;;  (cp:space-shapes (unbox the-space)))
-
-;; (cp:space-bodies the-space)
+(for-each (cut cp:space-add-constraint the-space <>)  rcs)
 
 (define (clear-space space)
   (for-each (cut cp:space-remove-body the-space <>) (cp:space-bodies the-space)))
 
 ;;;;; Graphics ;;;;;
-(define (watch-reload! file on-change)
-  (on-change file)
-  (define (tsleep n)
-    (thread-sleep! (seconds->time (+ n (time->seconds (current-time))))))
-  (define (get-time)
-    (file-modification-time file))
-  (define active (box #t))
-  (define (stop)
-    (box-set! active #f))
-  (thread-start!
-   (lambda ()
-     (let loop ((filetime '()))
-
-       (let ((newtime (get-time)))
-	 (when (not (equal? filetime newtime))
-	   (handle-exceptions e (lambda (e) (display e))
-	     (display "Updated: ") (display file) (newline)
-	     (on-change file)))
-	 (tsleep 1)
-	 (loop newtime)))))
-  stop)
-
-(define (watched-slurp file on-change)
-  (let ([active (box #t)]
-	[box-val (box (read-all file))])
-    (thread-start!
-     (lambda () (let loop ([filetime (file-modification-time file)])
-	     ;; ;(display "Polling ") (display file) (newline)
-	     (let ([newtime (file-modification-time file)])
-	       (when (not (equal? filetime newtime))
-		 (handle-exceptions e (lambda (e) (display e) (newline e))
-		   (let ([new-value (read-all file)])
-		     (display "Updated: ") (display file) (newline)
-		     (box-set! box-val new-value)
-		     (on-change file new-value))))
-	       (thread-sleep! 1)
-	       (loop newtime)))))))
 
 (define (projection-matrix)
   (perspective 600 600 0.1 100 70))
@@ -444,22 +372,27 @@
 				    (type->gl (mesh-index-type mesh))
 				    #f 0))))
 
+(define (render-node node projection view ctx-matrix)
+  (let ([render-fn (node-render-fn node)])
+    (render-fn node
+	       projection
+	       (m* ctx-matrix view)
+	       ctx-matrix)
+    ;; render children with sub-ctx
+    (let ([sub-ctx (m* (node-matrix node) ctx-matrix)])
+      (for-each (lambda (child)
+		  (render-node child projection view sub-ctx))
+		(node-children node)))))
 
-(define (render nodes)
-  (let ([projection (projection-matrix)]
-	[view (view-matrix)])
-    ;; call render fn of each node
-    (for-each (lambda (node)
-		(let ([render-fn (node-render-fn node)])
-		  (render-fn node
-			     projection
-			     view
-			     )))
-	      nodes)
+;; set root node
+(define root-node (make-node (lambda (x v p c) #f)
+			     '()
+			     (mat4-identity)))
 
-    (check-error)))
+(node-children-update! root-node append (unbox the-nodes))
 
-;;
+;;;; Window setup
+
 (glfw:key-callback (lambda (window key scancode action mods)
 		     ;(display (list 'key= key scancode action mods)) (newline)
                      (cond
@@ -478,21 +411,20 @@
 	 [screen-pos (make-point x y 0)])
     (m*vector! m-screen->world (make-point x y 0))))
 
-;;
-(glfw:cursor-position-callback (lambda (window x y)
-				 (box-set! the-mouse-pos (cons (+ (- (/ x 2)) 150)
-							       (+ (- (/ y 2)) 150)))
-					;(display (list 'cursor= x y)) (newline)
-					;(display (list 'cursor-world= (screen->world (cons x y)))) (newline)
-				 ))
 
+(glfw:cursor-position-callback
+ (lambda (window x y)
+   (box-set! the-mouse-pos (cons (+ (- (/ x 2)) 150)
+				 (+ (- (/ y 2)) 150)))
+   ;;(display (list 'cursor= x y)) (newline)
+   ;;(display (list 'cursor-world= (screen->world (cons x y)))) (newline)
+   ))
 
 (define (set-gravity)
   (let ([v (screen->world (unbox the-mouse-pos))])
-    (cp:space-set-gravity (unbox the-space)
+    (cp:space-set-gravity the-space
 			  (cp:v (f32vector-ref v 0)
 				(f32vector-ref v 1)))))
-
 
 (define (u32deref x)
   (u32vector-ref x 0))
@@ -538,62 +470,74 @@
     (list rendered-texture depthrenderbuffer)))
 
 
-
 (define (main)
-  (glfw:with-window (600 600 "Dendrite"
-			 resizable: #f
-			 context-version-major: 3
-			 context-version-minor: 2
-			 opengl-forward-compat: #t
-			 opengl-profile: glfw:+opengl-core-profile+)
-		    (gl:init)
-		    ;; (print (:supported? "GL_ARB_framebuffer_object"))
+  (glfw:with-window
+   (600 600 "Dendrite"
+	resizable: #f
+	context-version-major: 3
+	context-version-minor: 2
+	opengl-forward-compat: #t
+	opengl-profile: glfw:+opengl-core-profile+)
 
-		    ;; enable alpha blending
-		    (opengl:gl:Enable gl:+blend+)
-		    (opengl:gl:BlendFunc gl:+src-alpha+ gl:+one-minus-src-alpha+ )
+   (gl:init)
+   ;; (print (:supported? "GL_ARB_framebuffer_object"))
 
-		    (cell-unpause program1)
-		    (cell-unpause program2)
-		    (cell-unpause program3)
-		    (cell-unpause program-line)
+   ;; enable alpha blending
+   (opengl:gl:Enable gl:+blend+)
+   (opengl:gl:BlendFunc gl:+src-alpha+ gl:+one-minus-src-alpha+ )
 
-		    ;; create vertex array object for mesh
-		    (mesh-make-vao! circle-mesh `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
-						  (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
+   (cell-unpause program1)
+   (cell-unpause program2)
+   (cell-unpause program3)
+   (cell-unpause program-line)
 
-		    (mesh-make-vao! rectangle-mesh `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
-						     (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
+   ;; create vertex array object for mesh
+   (mesh-make-vao! circle-mesh
+		   `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
+		     (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
 
-		    (mesh-make-vao! the-line-mesh `((position . ,(gl:get-attrib-location (cell-get program-line) "position"))
-						    (color . ,(gl:get-attrib-location (cell-get program-line) "color")))
-				    #:stream)
+   (mesh-make-vao! rectangle-mesh
+		   `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
+		     (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
 
+   (mesh-make-vao! the-line-mesh
+		   `((position . ,(gl:get-attrib-location (cell-get program-line) "position"))
+		     (color . ,(gl:get-attrib-location (cell-get program-line) "color")))
+		   #:stream)
 
-		    (let loop ([i 0]
-			       [t (current-milliseconds)])
-		      (REPL) ; process repl event
-		      (cp:space-step (unbox the-space) 1/60 ) ;; TODO use delta time
-					;(cp:space-step (unbox the-space) 1/60 ) ;; TODO use delta time
-					;(cp:space-step (unbox the-space) 1/60 ) ;; TODO use delta time
-		      (let* ([p (screen->world (unbox the-mouse-pos))]
-			     [mouse-x (f32vector-ref p 0)]
-			     [mouse-y (f32vector-ref p 1)])
-			(cp:body-set-position (alist-ref 'body (unbox the-mouse-ball))
-					      (cp:v mouse-x mouse-y)))
+   (let loop ([i 0]
+	      [t (current-milliseconds)])
 
-		      (glfw:swap-buffers (glfw:window))
-		      (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
-		      (render (box-ref the-nodes))
-		      (glfw:poll-events) ; Because of the context version, initializing GLEW results in a harmless invalid enum
-		      (thread-yield!)
-		      (unless (glfw:window-should-close (glfw:window))
-			(if (eq? 0 (% i 100))
-			    (let ([dt (- (current-milliseconds) t)])
+     (glfw:swap-buffers (glfw:window))
+     (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
+
+     ;; set mouse object
+     (let* ([p (screen->world (unbox the-mouse-pos))]
+	    [mouse-x (f32vector-ref p 0)]
+	    [mouse-y (f32vector-ref p 1)])
+       (cp:body-set-position (alist-ref 'body (unbox the-mouse-ball))
+			     (cp:v mouse-x mouse-y)))
+
+     (REPL) ;; process repl event
+     (cp:space-step the-space 1/60 ) ;; TODO use delta time
+
+     (render-node root-node
+		  (projection-matrix)
+		  (view-matrix)
+		  (m*s (mat4-identity) 2))
+
+     ;; after render
+     (check-error)
+     (glfw:poll-events) ; Because of the context version, initializing GLEW results in a harmless invalid enum
+     (thread-yield!)
+
+     (unless (glfw:window-should-close (glfw:window))
+       (if (eq? 0 (% i 100))
+	   (let ([dt (- (current-milliseconds) t)])
 					;(display (/ 1000 dt)) (newline)
-			      #f
-			      ))
-			(loop (+ 1 i) (current-milliseconds))))))
+	     #f
+	     ))
+       (loop (+ 1 i) (current-milliseconds))))))
 
 (define main-thread (thread-start! (make-thread main)))
 

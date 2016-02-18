@@ -149,6 +149,22 @@
   fcell)
 
 
+
+(define (circle-ring n)
+  (let ([b (list->ringbuffer
+	    (map (lambda (i)
+		   (let ([angle (* i (/ n) pi 2)])
+		     (cons (* 2 (sin angle))
+			   (* 2 (cos angle)))))
+		 (range 0 n)))])
+    (map (lambda (j)
+	   `( ,(ringbuffer-get b j)
+	      ,(ringbuffer-get b (+ 1 j))))
+	 (range 0 n))))
+
+
+
+
 ;; (define v1 (file-cell "vertex-shaders/v1.glsl"))
 
 ;; (define v1-string (create-cell read-all v1))
