@@ -7,11 +7,11 @@ void main(){
 
    float id = inversesqrt( (p.x * p.x) + (p.y * p.y) ) ;
    float r = atan(p.x , p.y);
-   float v = 1 + sin(r*3)*0.5;
+   float v = 1 + sin(r*6)*0.5;
 
    float edge = clamp(0.4-id*.05, 0 ,0.4);
    float radial = clamp(v*id*0.01 , 0 ,1);
-   float m = 0.4+c.a;
+   float m = 0.4+c.a*0;
    fragColor = vec4(c.b*(c.a/3+1)/2,
 		    c.r*(c.a/3+1)/2,
 		    c.g*(c.a/3+1)/2,
