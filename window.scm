@@ -16,9 +16,9 @@
      utils
      symbol-utils
      posix
-     ringbuffer)
-
-(define render-circle-shape (box #f))
+     ringbuffer
+     matchable
+     extras)
 
 ;;;;; Utils ;;;;;
 
@@ -29,7 +29,7 @@
 (define the-line-mesh (line-mesh '(0 0) '(0 0)))
 
 (when (unbound? 'REPL)
-  (define REPL (make-prepl 1116)))
+  (define REPL (make-prepl (+ 6000 (random 1000)))))
 
 (include "pipeline.scm")
 
@@ -49,6 +49,9 @@
 
 (define (node-children-update! node f . args)
   (node-children-set! node (apply f (node-children node) args)))
+
+(define (node-children-append! node . children)
+  (node-children-update! node append children))
 
 (define (add-ball space x y idx #!key (elasticity 0.95) (friction 0.2) (mass 1.) (radius 0.1))
   (let* ((moment (cp:moment-for-circle mass 0. radius cp:vzero))
@@ -158,20 +161,49 @@
 					      i
 					      #:radius 0.1)))))
 
-(define (remove-node node)
-  (for-each remove-node (node-children node))
-  (node-children-update! (node-parent node) (cut remove node <>))
+
+(define (without list elem)
+  (remove (cut eq? elem <>) list))
+
+(define (remove-node parent node)
+;  (for-each (cut remove-node node <>) (node-children node))
+  (node-children-update! parent without node)
   (when (node-body node) (cp:space-remove-body the-space (node-body p)))
   (when (node-shape node)  (cp:space-remove-shape the-space (node-shape p))))
 
+
+(define the-counter (box 0))
+
+(define (repeatedly n f)
+  (if (positive? n)
+    (cons (f) (repeatedly (- n 1) f))
+    '()))
+
+(define (add-node-at-pos)
+					;   space x y idx
+  (let ([m (cp:body-get-position (node-body (unbox the-mouse-ball)))])
+    (node-children-update! root-node append
+			   (list (add-ball the-space (cp:v.x m) (cp:v.y m) (box-swap! the-counter inc))))
+    m
+    ))
+
+
+(comment
+
+ (begin
+   (sleep 4)
+   (add-node-at-pos))
+
+ )
+
+
 (define *render-constraint* (box #f))
 
-(box-set! render-circle-shape
+(define *render-circle-shape* (box #f))
+
+(box-set! *render-circle-shape*
 	  (lambda (projection-matrix view-matrix segment )
-	    (let* (
-		   [body (cp:shape-get-body segment)]
-					;[pos-a (cp:segment-shape-get-a segment)]
-					;		   [pos-b (cp:segment-shape-get-b segment)]
+	    (let* ([body (cp:shape-get-body segment)]
 		   [angle (+ (/ pi 4) (- (cp:body-get-angle body)))]
 		   [body-pos (cp:body-get-position body)]
 		   [trans (make-point (cp:v.x body-pos)
@@ -208,7 +240,6 @@
 			   (cp:constraint-get-impulse constraint)
 			   (vector 1 0 1)))))
 
-
 (define edges
   (list->vector
    (list-ec (:list x (circle-ring 24))
@@ -221,14 +252,16 @@
 		   [radius 0.3]
 		   [body-center (cp:body-new (cp:moment-for-segment mass start-pos end-pos radius) mass)]
 		   [shape (cp:circle-shape-new body-center radius cp:vzero)])
+
 	      (cp:body-set-position body-center center-pos)
 	      (cp:space-add-body the-space body-center)
 	      (cp:space-add-shape the-space shape)
+
 	      (node-children-update! root-node
 			 (cut cons
 			   (let* ([body body-center])
 			     (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					 ((unbox render-circle-shape) projection-matrix view-matrix shape))
+					 ((unbox *render-circle-shape*) projection-matrix view-matrix shape))
 				       body
 				       shape))
 			   <>))
@@ -237,6 +270,39 @@
 
 (define the-damping 0.4)
 
+(define constraints '())
+
+(define (add-constraint x)
+  (set! constraints (cons x constraints))
+  x)
+
+
+(define (damped-spring-update-stiffness spring f . args)
+  (let ([new (apply f (cp:damped-spring-get-stiffness spring) args)])
+    (cp:damped-spring-set-stiffness spring new)
+    new))
+
+(define (damped-spring-update-damping spring f . args)
+  (let ([new (apply f (cp:damped-spring-get-damping spring) args)])
+    (cp:damped-spring-set-damping spring new)
+    new))
+
+(define (update-stiffness delta)
+  (map
+   (lambda (c) (damped-spring-update-stiffness c + delta))
+   constraints))
+
+(define (update-damping delta)
+  (map
+   (lambda (c) (damped-spring-update-damping c + delta))
+   constraints))
+
+(comment
+
+ (update-stiffness 10)
+
+ )
+
 (for-each (cut cp:space-add-constraint the-space <>)
 	  (append-ec (:list offset '(1 3 9 11))
 		     (:range i 0 (vector-length edges))
@@ -244,16 +310,15 @@
 			  [before (vector-ref edges (% (+ i offset) (vector-length edges)))]
 			  [body-current (alist-ref 'body-center current)]
 			  [body-before (alist-ref 'body-center before)]
-			  [constraint (cp:damped-spring-new
-				       body-before
-				       body-current
-				       cp:v0
-				       cp:v0
-				       (cp:vlength (cp:v- (cp:body-get-position body-before)
-							  (cp:body-get-position body-current)))
-				       100.
-				       the-damping
-				       )]
+			  [constraint (add-constraint (cp:damped-spring-new
+						       body-before
+						       body-current
+						       cp:v0
+						       cp:v0
+						       (cp:vlength (cp:v- (cp:body-get-position body-before)
+									  (cp:body-get-position body-current)))
+						       100.
+						       the-damping))]
 			  [rot-constraint (cp:damped-rotary-spring-new
 					   body-before
 					   body-current
@@ -287,7 +352,7 @@
 	       (cut cons
 		 (let* ([body body-center])
 		   (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-			       ((unbox render-circle-shape) projection-matrix view-matrix shape))
+			       ((unbox *render-circle-shape*) projection-matrix view-matrix shape))
 			     body
 			     shape))
 		 <>))
@@ -296,16 +361,16 @@
 	       (let* ([current (vector-ref edges i)]
 		      [before (vector-ref edges (% (+ i 1) (vector-length edges)))]
 		      [body-current (alist-ref 'body-center current)]
-		      [constraint (cp:damped-spring-new
-				   body-center
-				   body-current
-				   (cp:vlerp cp:v0 (cp:body-get-position body-center) 0.1)
-				   cp:v0
-				   (cp:vlength (cp:v- (cp:body-get-position body-center)
-						      (cp:body-get-position body-current)))
-				   100.
-				   the-damping
-				   )]
+		      [constraint (add-constraint (cp:damped-spring-new
+						   body-center
+						   body-current
+						   (cp:vlerp cp:v0 (cp:body-get-position body-center) 0.1)
+						   cp:v0
+						   (cp:vlength (cp:v- (cp:body-get-position body-center)
+								      (cp:body-get-position body-current)))
+						   100.
+						   the-damping
+						   ))]
 		      [rot-constraint (cp:damped-rotary-spring-new
 				       body-center
 				       body-current
@@ -375,7 +440,31 @@
 
 ;;;; Window setup
 
+
+(define key-handler (box #f))
+
+(define last-key (box #f))
+
+(define (gravity-controller window key scancode action mods)
+  (when (equal? (./trace action) glfw:+press+)
+    (./trace (list  window key scancode action mods))
+    (cond [(equal? key glfw:+key-down+)
+	   (update-gravity cp:v+ (cp:v 0.0 -1.0))]
+
+	  [(equal? key glfw:+key-up+)
+	   (update-gravity cp:v+ (cp:v 0.0 1.0))]
+
+	  [(equal? key glfw:+key-left+)
+	   (update-gravity cp:v+ (cp:v -1.0 0.0))]
+
+	  [(equal? key glfw:+key-right+)
+	   (update-gravity cp:v+ (cp:v 1.0 0.0))])))
+
+(box-set! key-handler gravity-controller)
+
 (glfw:key-callback (lambda (window key scancode action mods)
+		     (display (list window key scancode action mods))
+		     ((unbox key-handler) window key scancode action mods)
 		     ;(display (list 'key= key scancode action mods)) (newline)
                      (cond
                       [(and (eq? key glfw:+key-escape+) (eq? action glfw:+press+))
@@ -393,14 +482,25 @@
 	 [screen-pos (make-point x y 0)])
     (m*vector! m-screen->world (make-point x y 0))))
 
-
 (glfw:cursor-position-callback
  (lambda (window x y)
    (box-set! the-mouse-pos (cons (+ (- (/ x 2)) 150)
-				 (+ (- (/ y 2)) 150)))
-   ;;(display (list 'cursor= x y)) (newline)
-   ;;(display (list 'cursor-world= (screen->world (cons x y)))) (newline)
-   ))
+				 (+ (- (/ y 2)) 150)))))
+
+
+(define mouse-button-handler
+  (box (lambda (window button action mods)
+	 (when (and (equal? button glfw:+mouse-button-1+)
+		    (or (equal? action glfw:+release+)
+			(equal? action glfw:+repeat+)))
+	   (add-node-at-pos)))))
+
+
+(glfw:mouse-button-callback
+ (lambda (window button action mods)
+   (./trace (list window button action mods))
+   ((unbox mouse-button-handler) window button action mods)))
+
 
 (define (set-gravity)
   (let ([v (screen->world (unbox the-mouse-pos))])
@@ -408,49 +508,10 @@
 			  (cp:v (f32vector-ref v 0)
 				(f32vector-ref v 1)))))
 
-(define (u32deref x)
-  (u32vector-ref x 0))
-
-(define (render-to-texture)
-  ;;; http://www.opengl-tutorial.org/intermediate-tutorials/tutorial-14-render-to-texture/
-  (let* ([fb-name 1]
-	 [rendered-texture (u32vector 0)]
-	 [depthrenderbuffer (u32vector 0)])
-
-
-    ;; create framebuffer
-    (gl:gen-framebuffers fb-name (u32vector 1 2 3))
-    (gl:bind-framebuffer gl:+framebuffer+ fb-name)
-
-    ;; create texture
-    (gl:gen-textures 1 rendered-texture)
-    (gl:bind-texture gl:+texture-2d+ (u32deref rendered-texture))
-    (gl:tex-image-2d gl:+texture-2d+
-    		     0
-    		     gl:+rgb+
-    		     1024 ;width
-    		     768 ; height
-    		     0 ; border
-    		     gl:+rgb+ ; format
-    		     gl:+unsigned-byte+ ;type
-    		     #f ; empty
-    		     )
-
-    (gl:tex-parameteri gl:+texture-2d+ gl:+texture-mag-filter+ gl:+nearest+)
-    (gl:tex-parameteri gl:+texture-2d+ gl:+texture-min-filter+ gl:+nearest+)
-
-    ;; created renderbuffer
-    (gl:gen-renderbuffers 1 depthrenderbuffer)	      ;
-    (gl:bind-renderbuffer gl:+renderbuffer+ (u32deref depthrenderbuffer)) ;
-    (gl:renderbuffer-storage gl:+renderbuffer+ gl:+depth-component+ 1024 768) ;
-    (gl:framebuffer-renderbuffer gl:+framebuffer+ gl:+depth-attachment+ gl:+renderbuffer+ (u32deref depthrenderbuffer)) ;
-
-
-    ;; configure framebuffer
-    (gl:framebuffer-texture gl:+framebuffer+ gl:+color-attachment0+ (u32deref rendered-texture) 0)
-
-    (list rendered-texture depthrenderbuffer)))
-
+(define (update-gravity f . args)
+  (let ([new-gravity (apply f (cp:space-get-gravity the-space) args)])
+    (cp:space-set-gravity the-space new-gravity)
+    new-gravity))
 
 (define (main)
   (glfw:with-window
@@ -521,17 +582,34 @@
 	     ))
        (loop (+ 1 i) (current-milliseconds))))))
 
+(comment
+
+ (remove-node root-node (unbox the-mouse-ball))
+
+ )
+
+(define main-thread (make-thread main))
+
+
+(use soil)
+
+(define mt (thread-start! main-thread))
 
 
 
+(comment (thread-terminate! mt )
 
 
+	 (begin (update-gravity cp:v+ (cp:v 0. 1.))
+
+		(update-gravity (constantly (cp:v 0 0)))
+
+		(cp:space-get-gravity the-space))
+
+	 (unbox foo)
 
 
-(define main-thread (thread-start! (make-thread main)))
-
-					;(thread-join! main-thread)
-
+	 )
 					;(main)
 
 (require-extension apropos)
@@ -541,19 +619,46 @@
 
 (define exit? (make-parameter #f))
 
-(define (shell-repl)
-  (if (exit?)
-      #t
-      (begin (handle-exceptions
-	      exn
-	      (begin (print-error-message exn)
-		     (display (with-output-to-string (lambda () (print-call-chain)))))
-	      (let ((x (with-input-from-string (parley ((repl-prompt))) (lambda () (read)))))
-		(write (eval x))
-                ;(line-num (+ (line-num) 1))
-		))
-	     (newline)
-	     (shell-repl))))
+(define stack (box '()))
 
-(when (not (feature? 'csi))
-  (shell-repl))
+(define (read-balanced-port)
+  (let loop ()
+    (./trace stack)
+    (let ([line (read-line)])
+      (./trace line)
+      (if (eof-object? line)
+	  line
+	  (handle-exceptions exn
+	      (begin
+		(./trace exn)
+		(box-swap! stack (cut cons line <>))
+		(loop))
+	    (let ([str (string-concatenate (reverse (cons line (unbox stack))))])
+	      (./trace str)
+	      (let ([result (with-input-from-string str read)])
+		(box-set! stack '())
+		result)))))))
+
+;; (define (shell-repl)
+;;   (if (exit?)
+;;       #t
+;;       (begin (handle-exceptions
+;; 	      exn
+;; 	      (begin (print-error-message exn)
+;; 		     (display (with-output-to-string (lambda () (print-call-chain)))))
+;; 	      (let ((x (with-input-from-string (parley ((repl-prompt))) read-balanced-port)))
+;; 		(write (eval x))
+;;                 ;(line-num (+ (line-num) 1))
+;; 		))
+;; 	     (newline)
+;; 	     (shell-repl))))
+
+
+;; (shell-repl)
+
+(define (noise-tex)
+  (let ([tex (u32vector 0)])
+    (gl:gen-textures 1 tex)
+    (let ([t (u32vector-ref tex 0)])
+      (load-ogl-texture "noise.jpg" force-channels/auto t texture/repeats)
+      t)))
