@@ -23,3 +23,31 @@
 (define program2     (create-paused-cell compile-shaders! *v2* *fragment*))
 (define program3     (create-paused-cell compile-shaders! *v3* *fragment-constant*))
 (define program-line (create-paused-cell compile-shaders! *vline* *fragment-line*))
+
+
+(use soil)
+
+;; ;; returns a texture id, requires gl init
+;; (define (load-texture image-path)
+;;   (let ([tex (u32vector 0)])
+;;     (gl:gen-textures 1 tex)
+;;     (let ([tex-id (u32vector-ref tex 0)])
+;;       (load-ogl-texture image-path force-channels/auto tex-id texture/repeats)
+;;       )))
+
+
+
+;; (define noise-image-file (file-cell "resources/img/noise.jpg"))
+
+;; (define noise-image-texture (create-paused-cell load-texture noise-image-file))
+
+
+
+;; after open gl init
+(define (start-all-cells)
+   (cell-unpause program1)
+   (cell-unpause program2)
+   (cell-unpause program3)
+   (cell-unpause program-line)
+;   (cell-unpause noise-image-texture)
+   )

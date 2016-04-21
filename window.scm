@@ -29,7 +29,8 @@
 (define the-line-mesh (line-mesh '(0 0) '(0 0)))
 
 (when (unbound? 'REPL)
-  (define REPL (make-prepl (+ 6000 (random 1000)))))
+  (define repl-port 6060)
+  (define REPL (make-prepl repl-port)))
 
 (include "pipeline.scm")
 
@@ -37,6 +38,7 @@
 
 ;; TODO perform physics in a separate thread
 (define the-space #f)
+
 
 (define-record node render-fn children matrix body shape) ; takes node , mvp ,
 
@@ -53,7 +55,7 @@
 (define (node-children-append! node . children)
   (node-children-update! node append children))
 
-(define (add-ball space x y idx #!key (elasticity 0.95) (friction 0.2) (mass 1.) (radius 0.1))
+(define (add-ball space x y idx #!key (elasticity 0.95) (friction 0.2) (mass 1.) (radius 0.1) (velocity #f))
   (let* ((moment (cp:moment-for-circle mass 0. radius cp:vzero))
 	 (body (cp:space-add-body space (cp:body-new  mass moment)))
 	 (shape (cp:circle-shape-new body radius cp:vzero)))
@@ -64,6 +66,9 @@
     (cp:body-set-position body (cp:v (exact->inexact x)
 				     (exact->inexact y)))
     (cp:space-add-shape space shape)
+
+    (when velocity
+      (cp:body-set-velocity body velocity))
 
     (let ([n (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
 			 (let ([angle (- (cp:body-get-angle body))]
@@ -84,7 +89,6 @@
 		       body
 		       shape)])
       n)))
-
 
 (define (fixed-line-segment space from to #!key (radius 0.1))
   (cp:segment-shape-new (cp:space-get-static-body space) from to radius))
@@ -139,7 +143,7 @@
 
     (scene-1 space)
 
-    (box-set! the-mouse-ball (add-ball space 10. 10. 0 #:radius 1. #:friction 0.01))
+    (box-set! the-mouse-ball (add-ball space 10. 10. 0 #:radius 0.2 #:friction 0.01))
 
     (node-children-update! root-node append
 			   (list (unbox the-mouse-ball)))
@@ -148,6 +152,15 @@
     space))
 
 (set! the-space (init-physics))
+
+
+
+(define (rand n)
+  (let ([sz 10000])
+    (* n (- (* 2 (/ (random sz) sz)) 1))))
+
+(define (v-rand n)
+  (f64vector (rand n) (rand n)))
 
 (node-children-update! root-node append
 		       (list (unbox the-mouse-ball))
@@ -183,9 +196,10 @@
 					;   space x y idx
   (let ([m (cp:body-get-position (node-body (unbox the-mouse-ball)))])
     (node-children-update! root-node append
-			   (list (add-ball the-space (cp:v.x m) (cp:v.y m) (box-swap! the-counter inc))))
-    m
-    ))
+			   (list (add-ball the-space (cp:v.x m) (cp:v.y m) (box-swap! the-counter inc)
+					   #:radius 0.4
+					   #:velocity (v-rand 10))))
+    m))
 
 
 (comment
@@ -197,48 +211,46 @@
  )
 
 
-(define *render-constraint* (box #f))
+(define *render-constraint* (make-parameter #f))
 
-(define *render-circle-shape* (box #f))
+(define *render-circle-shape* (make-parameter #f))
 
-(box-set! *render-circle-shape*
-	  (lambda (projection-matrix view-matrix segment )
-	    (let* ([body (cp:shape-get-body segment)]
-		   [angle (+ (/ pi 4) (- (cp:body-get-angle body)))]
-		   [body-pos (cp:body-get-position body)]
-		   [trans (make-point (cp:v.x body-pos)
-				      (- (cp:v.y body-pos))
-				      0)])
-	      (render-mesh circle-mesh
-			   (cell-get program3)
+(*render-circle-shape* (lambda (projection-matrix view-matrix segment )
+			 (let* ([body (cp:shape-get-body segment)]
+				[angle (+ (/ pi 4) (- (cp:body-get-angle body)))]
+				[body-pos (cp:body-get-position body)]
+				[trans (make-point (cp:v.x body-pos)
+						   (- (cp:v.y body-pos))
+						   0)])
+			   (render-mesh circle-mesh
+					(cell-get program3)
 
-			   (m* projection-matrix
-			       (m* (translation trans)
-				   (m* view-matrix
-				       (rotate-z angle (model-matrix)))))
+					(m* projection-matrix
+					    (m* (translation trans)
+						(m* view-matrix
+						    (rotate-z angle (model-matrix)))))
 
-			   (cp:vlength (cp:body-get-velocity body))
+					(cp:vlength (cp:body-get-velocity body))
 
-			   (vector 1 1 0)))))
+					(vector 1 1 0)))))
 
-(box-set! *render-constraint*
-	  (lambda (projection-matrix view-matrix ctx-matrix constraint)
-	    (let* ([pos-a (cp:body-get-position (cp:constraint-get-body-a constraint))]
-		   [pos-b (cp:body-get-position (cp:constraint-get-body-b constraint))]
-		   [angle (cp:vtoangle (cp:v- pos-a pos-b))]
-		   [middle (cp:vlerp pos-a pos-b 0.5)]
-		   [trans (make-point (cp:v.x middle) (- (cp:v.y  middle))
-				      0.)])
+(*render-constraint* (lambda (projection-matrix view-matrix ctx-matrix constraint)
+		       (let* ([pos-a (cp:body-get-position (cp:constraint-get-body-a constraint))]
+			      [pos-b (cp:body-get-position (cp:constraint-get-body-b constraint))]
+			      [angle (cp:vtoangle (cp:v- pos-a pos-b))]
+			      [middle (cp:vlerp pos-a pos-b 0.5)]
+			      [trans (make-point (cp:v.x middle) (- (cp:v.y  middle))
+						 0.)])
 
 
-	      (mesh-update! the-line-mesh (line-mesh-vertices (cp:v.x pos-a) (- (cp:v.y pos-a))
-							      (cp:v.x pos-b) (- (cp:v.y pos-b))))
+			 (mesh-update! the-line-mesh (line-mesh-vertices (cp:v.x pos-a) (- (cp:v.y pos-a))
+									 (cp:v.x pos-b) (- (cp:v.y pos-b))))
 
-	      (render-mesh the-line-mesh
-			   (cell-get program-line)
-			   (m* projection-matrix (m* view-matrix (model-matrix)))
-			   (cp:constraint-get-impulse constraint)
-			   (vector 1 0 1)))))
+			 (render-mesh the-line-mesh
+				      (cell-get program-line)
+				      (m* projection-matrix (m* view-matrix (model-matrix)))
+				      (cp:constraint-get-impulse constraint)
+				      (vector 1 0 1)))))
 
 (define edges
   (list->vector
@@ -261,7 +273,7 @@
 			 (cut cons
 			   (let* ([body body-center])
 			     (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					 ((unbox *render-circle-shape*) projection-matrix view-matrix shape))
+					 ((*render-circle-shape*) projection-matrix view-matrix shape))
 				       body
 				       shape))
 			   <>))
@@ -330,9 +342,9 @@
 		     (node-children-update! root-node
 		      (cut append <>
 			   (list (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					     ((unbox *render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+					     ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
 				 (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					     ((unbox *render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint))))))
+					     ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint))))))
 		     (list constraint rot-constraint))))
 
 (define rcs
@@ -352,7 +364,7 @@
 	       (cut cons
 		 (let* ([body body-center])
 		   (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-			       ((unbox *render-circle-shape*) projection-matrix view-matrix shape))
+			       ((*render-circle-shape*) projection-matrix view-matrix shape))
 			     body
 			     shape))
 		 <>))
@@ -380,9 +392,9 @@
 				       the-damping)])
 		 (node-children-update! root-node append
 			    (list (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					      ((unbox *render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+					      ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
 				  (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					      ((unbox *render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))))
+					      ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))))
 
 		 (list constraint rot-constraint)))))
 
@@ -393,8 +405,7 @@
 
 ;;;;; Graphics ;;;;;
 
-(define (projection-matrix)
-  (perspective 600 600 0.1 100 70))
+(define projection-matrix (make-parameter (perspective 600 600 0.1 100 70)))
 
 (define the-eye-point
   (box (make-point 0 0 7)))
@@ -440,37 +451,7 @@
 
 ;;;; Window setup
 
-
-(define key-handler (box #f))
-
-(define last-key (box #f))
-
-(define (gravity-controller window key scancode action mods)
-  (when (equal? (./trace action) glfw:+press+)
-    (./trace (list  window key scancode action mods))
-    (cond [(equal? key glfw:+key-down+)
-	   (update-gravity cp:v+ (cp:v 0.0 -1.0))]
-
-	  [(equal? key glfw:+key-up+)
-	   (update-gravity cp:v+ (cp:v 0.0 1.0))]
-
-	  [(equal? key glfw:+key-left+)
-	   (update-gravity cp:v+ (cp:v -1.0 0.0))]
-
-	  [(equal? key glfw:+key-right+)
-	   (update-gravity cp:v+ (cp:v 1.0 0.0))])))
-
-(box-set! key-handler gravity-controller)
-
-(glfw:key-callback (lambda (window key scancode action mods)
-		     (display (list window key scancode action mods))
-		     ((unbox key-handler) window key scancode action mods)
-		     ;(display (list 'key= key scancode action mods)) (newline)
-                     (cond
-                      [(and (eq? key glfw:+key-escape+) (eq? action glfw:+press+))
-                       (glfw:set-window-should-close window #t)])))
-
-(define the-mouse-pos (box (cons 10. 10.)))
+(include "input.scm")
 
 (define (screen->world xy)
   (let* ([x (car xy)]
@@ -482,28 +463,8 @@
 	 [screen-pos (make-point x y 0)])
     (m*vector! m-screen->world (make-point x y 0))))
 
-(glfw:cursor-position-callback
- (lambda (window x y)
-   (box-set! the-mouse-pos (cons (+ (- (/ x 2)) 150)
-				 (+ (- (/ y 2)) 150)))))
-
-
-(define mouse-button-handler
-  (box (lambda (window button action mods)
-	 (when (and (equal? button glfw:+mouse-button-1+)
-		    (or (equal? action glfw:+release+)
-			(equal? action glfw:+repeat+)))
-	   (add-node-at-pos)))))
-
-
-(glfw:mouse-button-callback
- (lambda (window button action mods)
-   (./trace (list window button action mods))
-   ((unbox mouse-button-handler) window button action mods)))
-
-
 (define (set-gravity)
-  (let ([v (screen->world (unbox the-mouse-pos))])
+  (let ([v (screen->world (the-mouse-pos))])
     (cp:space-set-gravity the-space
 			  (cp:v (f32vector-ref v 0)
 				(f32vector-ref v 1)))))
@@ -512,6 +473,8 @@
   (let ([new-gravity (apply f (cp:space-get-gravity the-space) args)])
     (cp:space-set-gravity the-space new-gravity)
     new-gravity))
+
+(define on-frame (make-parameter #f))
 
 (define (main)
   (glfw:with-window
@@ -529,10 +492,11 @@
    (opengl:gl:Enable gl:+blend+)
    (opengl:gl:BlendFunc gl:+src-alpha+ gl:+one-minus-src-alpha+ )
 
-   (cell-unpause program1)
-   (cell-unpause program2)
-   (cell-unpause program3)
-   (cell-unpause program-line)
+   (start-all-cells)
+
+
+;   (gl:bind-texture gl:+texture-2d+ (cell-get noise-image-texture))
+ ;  (gl:tex-parameteri gl:+texture-2d+ gl:+texture-min-filter+ gl:+linear+)
 
    ;; create vertex array object for mesh
    (mesh-make-vao! circle-mesh
@@ -549,38 +513,47 @@
 		   #:stream)
 
    (let loop ([i 0]
-	      [t (current-milliseconds)])
+	      [pt (current-milliseconds)])
+     (let* ([now (current-milliseconds)]
+	    [dt (- now pt)]
+	    [on-frame* (on-frame)])
+       (when on-frame* (on-frame* dt)) ;; OPTIMIZE only unbox every x ms
+       (unless (glfw:window-should-close (glfw:window))
+	 (loop (+ 1 i)
+	       now))))))
 
-     (glfw:swap-buffers (glfw:window))
-     (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
 
-     ;; set mouse object
-     (let* ([p (screen->world (unbox the-mouse-pos))]
-	    [mouse-x (f32vector-ref p 0)]
-	    [mouse-y (f32vector-ref p 1)])
-       (cp:body-set-position (node-body (unbox the-mouse-ball))
-			     (cp:v mouse-x mouse-y)))
+(on-frame (lambda (dt)
 
-     (REPL) ;; process repl event
-     (cp:space-step the-space 1/60 ) ;; TODO use delta time
+	   ;; set mouse position
+	   (let* ([p (screen->world (the-mouse-pos))]
+		  [mouse-x (f32vector-ref p 0)]
+		  [mouse-y (f32vector-ref p 1)])
+	     (cp:body-set-position (node-body (unbox the-mouse-ball))
+				   (cp:v mouse-x mouse-y)))
 
-     (render-node root-node
-		  (projection-matrix)
-		  (view-matrix)
-		  (m*s (mat4-identity) 2))
+ 	   ;; process repl event
+	   (REPL)
 
-     ;; after render
-     (check-error)
-     (glfw:poll-events) ; Because of the context version, initializing GLEW results in a harmless invalid enum
-     (thread-yield!)
+	   ;; advance physics
+	   (cp:space-step the-space 1/60 )
 
-     (unless (glfw:window-should-close (glfw:window))
-       (if (eq? 0 (% i 100))
-	   (let ([dt (- (current-milliseconds) t)])
-					;(display (/ 1000 dt)) (newline)
-	     #f
-	     ))
-       (loop (+ 1 i) (current-milliseconds))))))
+
+	   ;; draw all nodes
+	   (glfw:swap-buffers (glfw:window))
+	   (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
+
+	   (render-node root-node
+			(projection-matrix)
+			(view-matrix)
+			(m*s (mat4-identity) 2))
+
+	   ;; after render
+
+	   (check-error)
+	   (glfw:poll-events) ; Because of the context version, initializing GLEW results in a harmless invalid enum
+
+	   (thread-yield!)))
 
 (comment
 
@@ -653,12 +626,5 @@
 ;; 	     (newline)
 ;; 	     (shell-repl))))
 
-
 ;; (shell-repl)
-
-(define (noise-tex)
-  (let ([tex (u32vector 0)])
-    (gl:gen-textures 1 tex)
-    (let ([t (u32vector-ref tex 0)])
-      (load-ogl-texture "noise.jpg" force-channels/auto t texture/repeats)
-      t)))
+;;(geiser-start-server)
