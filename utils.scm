@@ -24,7 +24,15 @@
 
 (define (inc i) (+ 1 i))
 
+(define rest cdr)
 
+(define (keep f xs)
+  (if (null-list? xs)
+      xs
+      (let ([fx (f (first xs))])
+	(if fx
+	    (cons fx (keep f (rest xs)))
+	    (keep f (rest xs))))))
 
 (define (nth list n)
   (let loop ([i 0]
@@ -53,6 +61,20 @@
        (printf "---------------- \n" )
        (cdr (last name-to-val)))]))
 
+(define-syntax define-box
+  (syntax-rules ()
+    [(_ f body)
+     (define (first f)
+       (lambda (rest f)
+	 body))]))
+
+(define (println a . args)
+  (display a) (display " ")
+  (for-each (lambda (x)
+	      (display x)
+	      (display " "))
+	    args)
+  (newline))
 
 (define-record cell
   box
@@ -67,9 +89,9 @@
 
 (define (cell-update! cell)
   (when (not (cell-paused cell))
-    ;(display "Updated")
-    ;(display (cell-fn cell))
-    ;(newline)
+					;(display "Updated")
+					;(display (cell-fn cell))
+					;(newline)
     ((cell-fn cell))))
 
 

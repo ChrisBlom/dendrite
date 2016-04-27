@@ -1,5 +1,12 @@
 (import chicken scheme)
 
+;;
+(require-extension apropos)
+(require-extension chicken-doc)
+(require-extension parley)
+(require-extension parley-auto-completion)
+
+
 (use (prefix glfw3 glfw:)
      (prefix opengl-glew gl:)
      (prefix gl opengl:)
@@ -20,6 +27,8 @@
      matchable
      extras)
 
+(define the-counter (box 0))
+
 ;;;;; Utils ;;;;;
 
 (include "utils.scm")
@@ -29,7 +38,7 @@
 (define the-line-mesh (line-mesh '(0 0) '(0 0)))
 
 (when (unbound? 'REPL)
-  (define repl-port 6060)
+  (define repl-port 6062)
   (define REPL (make-prepl repl-port)))
 
 (include "pipeline.scm")
@@ -40,14 +49,30 @@
 (define the-space #f)
 
 
-(define-record node render-fn children matrix body shape) ; takes node , mvp ,
+(define-record node render-fn children matrix body shape id) ; takes node , mvp ,
 
-(define (new-node render-fn #!optional (body #f) (shape #f))
-  (make-node render-fn
-	     '()
-	     (mat4-identity)
-	     body
-	     shape))
+(define all-nodes '())
+
+(define (conj list elem)
+  (cons elem list))
+
+(define-syntax update!
+  (syntax-rules ()
+    [(_ v f x ...)
+     (begin (set! v (f v x ...))
+	    v)]))
+
+
+
+(define (new-node render-fn #!optional (body #f) (shape #f) (id #f))
+  (let ([n (make-node render-fn
+		      '()
+		      (mat4-identity)
+		      body
+		      shape
+		      (or id (box-swap! the-counter inc)))])
+    (update! all-nodes conj n)
+    n))
 
 (define (node-children-update! node f . args)
   (node-children-set! node (apply f (node-children node) args)))
@@ -97,7 +122,40 @@
 
 (define the-nodes (box (list)))
 
-(define the-mouse-ball (box #f))
+(define *mouse-point* (make-parameter (cp:v 0 0)))
+
+(define the-mouse-ball (make-parameter #f))
+
+(define (node-descendants node)
+  (let ([children (node-children node)])
+    (if (null-list? children)
+	'())
+    (apply append
+	   children
+	   (map node-descendants children))))
+
+(comment
+
+ (define ff (cp:shape-filter-new (cp:uint 1) cp:all-categories cp:all-categories))
+
+ (define out (allocate 1))
+
+ (define p (cp:space-point-query-nearest the-space (*mouse-point*) 4 ff out))
+
+ (filter
+  (lambda (x) (eq? (node-shape x) p))
+  (map print (map node-shape all-nodes)))
+
+ (filter
+  (o (cut equal? p <>) node-shape)
+  (node-descendants root-node))
+
+ (filter
+  (cut equal? p <>)
+  (cp:space-shapes the-space))
+
+)
+
 
 ;;;; Scene Setup
 
@@ -131,6 +189,7 @@
 			     '()
 			     (mat4-identity)
 			     #f
+			     #f
 			     #f))
 
 
@@ -143,10 +202,10 @@
 
     (scene-1 space)
 
-    (box-set! the-mouse-ball (add-ball space 10. 10. 0 #:radius 0.2 #:friction 0.01))
+    (the-mouse-ball (add-ball space 10. 10. 0 #:radius 0.2 #:friction 0.01))
 
     (node-children-update! root-node append
-			   (list (unbox the-mouse-ball)))
+			   (list (the-mouse-ball)))
 
     ;; return space
     space))
@@ -163,7 +222,7 @@
   (f64vector (rand n) (rand n)))
 
 (node-children-update! root-node append
-		       (list (unbox the-mouse-ball))
+		       (list (the-mouse-ball))
 		       (let ([n 300])
 			 (list-ec (:range i n)
 				  (let ([angle (/ (* pi 2 i 8) n)]
@@ -185,7 +244,7 @@
   (when (node-shape node)  (cp:space-remove-shape the-space (node-shape p))))
 
 
-(define the-counter (box 0))
+
 
 (define (repeatedly n f)
   (if (positive? n)
@@ -194,22 +253,12 @@
 
 (define (add-node-at-pos)
 					;   space x y idx
-  (let ([m (cp:body-get-position (node-body (unbox the-mouse-ball)))])
+  (let ([m (cp:body-get-position (node-body (the-mouse-ball)))])
     (node-children-update! root-node append
 			   (list (add-ball the-space (cp:v.x m) (cp:v.y m) (box-swap! the-counter inc)
 					   #:radius 0.4
 					   #:velocity (v-rand 10))))
     m))
-
-
-(comment
-
- (begin
-   (sleep 4)
-   (add-node-at-pos))
-
- )
-
 
 (define *render-constraint* (make-parameter #f))
 
@@ -284,9 +333,12 @@
 
 (define constraints '())
 
+;; remove, get constrains from space
 (define (add-constraint x)
   (set! constraints (cons x constraints))
   x)
+
+
 
 
 (define (damped-spring-update-stiffness spring f . args)
@@ -307,7 +359,7 @@
 (define (update-damping delta)
   (map
    (lambda (c) (damped-spring-update-damping c + delta))
-   constraints))
+   (cp:space-constraints the-space)))
 
 (comment
 
@@ -405,16 +457,19 @@
 
 ;;;;; Graphics ;;;;;
 
+
+;;; Camera
+
 (define projection-matrix (make-parameter (perspective 600 600 0.1 100 70)))
 
-(define the-eye-point
-  (box (make-point 0 0 7)))
+
+(define the-eye-point (make-parameter (make-point 0 0 70)))
 
 (define the-object-point
   (box (make-point 0 0 0)))
 
 (define (view-matrix)
-  (look-at (unbox the-eye-point)
+  (look-at (the-eye-point)
 	   (unbox the-object-point)
            (make-point 0 1 0) ; up vector
 	   ))
@@ -422,7 +477,9 @@
 (define (model-matrix)
   (mat4-identity))
 
-(define circle-mesh (disk 20))
+;;;  Meshes
+
+(define circle-mesh (disk 60))
 
 (define rectangle-mesh rect)
 
@@ -449,9 +506,7 @@
 				    (type->gl (mesh-index-type mesh))
 				    #f 0))))
 
-;;;; Window setup
-
-(include "input.scm")
+;;; Window setup
 
 (define (screen->world xy)
   (let* ([x (car xy)]
@@ -459,9 +514,10 @@
 	 [v (view-matrix)]
 	 [p (projection-matrix)]
 	 [world->screen (m* v p)]
-	 [m-screen->world (inverse world->screen)]
-	 [screen-pos (make-point x y 0)])
-    (m*vector! m-screen->world (make-point x y 0))))
+	 [m-screen->world (inverse world->screen)])
+    (m*vector! m-screen->world (make-point x y 1))))
+
+(include "input.scm")
 
 (define (set-gravity)
   (let ([v (screen->world (the-mouse-pos))])
@@ -529,7 +585,7 @@
 	   (let* ([p (screen->world (the-mouse-pos))]
 		  [mouse-x (f32vector-ref p 0)]
 		  [mouse-y (f32vector-ref p 1)])
-	     (cp:body-set-position (node-body (unbox the-mouse-ball))
+	     (cp:body-set-position (node-body (the-mouse-ball))
 				   (cp:v mouse-x mouse-y)))
 
  	   ;; process repl event
@@ -557,7 +613,7 @@
 
 (comment
 
- (remove-node root-node (unbox the-mouse-ball))
+ (remove-node root-node (the-mouse-ball))
 
  )
 
@@ -583,48 +639,11 @@
 
 
 	 )
-					;(main)
 
-(require-extension apropos)
-(require-extension chicken-doc)
-(require-extension parley)
-(require-extension parley-auto-completion)
 
-(define exit? (make-parameter #f))
 
-(define stack (box '()))
-
-(define (read-balanced-port)
-  (let loop ()
-    (./trace stack)
-    (let ([line (read-line)])
-      (./trace line)
-      (if (eof-object? line)
-	  line
-	  (handle-exceptions exn
-	      (begin
-		(./trace exn)
-		(box-swap! stack (cut cons line <>))
-		(loop))
-	    (let ([str (string-concatenate (reverse (cons line (unbox stack))))])
-	      (./trace str)
-	      (let ([result (with-input-from-string str read)])
-		(box-set! stack '())
-		result)))))))
-
-;; (define (shell-repl)
-;;   (if (exit?)
-;;       #t
-;;       (begin (handle-exceptions
-;; 	      exn
-;; 	      (begin (print-error-message exn)
-;; 		     (display (with-output-to-string (lambda () (print-call-chain)))))
-;; 	      (let ((x (with-input-from-string (parley ((repl-prompt))) read-balanced-port)))
-;; 		(write (eval x))
-;;                 ;(line-num (+ (line-num) 1))
-;; 		))
-;; 	     (newline)
-;; 	     (shell-repl))))
-
-;; (shell-repl)
-;;(geiser-start-server)
+;; Local Variables:
+;; eval: (eldoc-mode -1)
+;; eval: (geiser-autodoc-mode -1)
+;; eval: (setq company-minimum-prefix-length 4)
+;; End:
