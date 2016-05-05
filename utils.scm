@@ -43,6 +43,10 @@
 		   h
 		   (loop (inc i) t))])))
 
+(define (parameter-update param f . args)
+  (param (apply f (param) args)))
+
+
 (define-syntax comment
   (syntax-rules ()
     [(comment expr ...)

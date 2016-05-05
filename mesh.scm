@@ -56,6 +56,42 @@
               indices: `(type: #:ushort
 			       initial-elements: ,hexagon-indices)))
 
+;; (-1,1)   1             0 (1,1)
+;;            +-----------+
+;;            | .         \
+;;            |   .       \
+;;            |     .     \
+;;            |       .   \
+;;            |         . \
+;;            +-----------+
+;; (-1,-1)   3             2  (1,-1)
+
+(define square-positions (list  0.5   0.5 ;; 0
+			       -0.5   0.5 ;; 1
+			        0.5  -0.5 ;; 2
+			       -0.5  -0.5 ;; 3
+			    ))
+
+(define square-colors (list 255 255 255 ;; 0
+			    255 255 255 ;; 1
+			    255 255 255 ;; 2
+			    255 255 255 ;; 3
+			    ))
+
+(define square-indices
+  (apply append '((0 1 2)
+		  (3 1 2))))
+
+(define square-mesh
+  (make-mesh
+   vertices: `(attributes: ((position #:float 2)
+			    (color #:unsigned-byte 3
+				   normalized: #t))
+			   initial-elements: ((position . ,square-positions)
+					      (color . ,square-colors)))
+   indices: `(type: #:ushort
+		    initial-elements: ,square-indices)))
+
 (define (disk n)
   (make-mesh
    vertices: `(attributes: ((position #:float 2)

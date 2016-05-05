@@ -27,6 +27,8 @@
      matchable
      extras)
 
+
+
 (define the-counter (box 0))
 
 ;;;;; Utils ;;;;;
@@ -38,7 +40,7 @@
 (define the-line-mesh (line-mesh '(0 0) '(0 0)))
 
 (when (unbound? 'REPL)
-  (define repl-port 6062)
+  (define repl-port 6060)
   (define REPL (make-prepl repl-port)))
 
 (include "pipeline.scm")
@@ -80,6 +82,30 @@
 (define (node-children-append! node . children)
   (node-children-update! node append children))
 
+
+
+
+
+(define ((render-ball idx)  node projection-matrix view-matrix ctx-matrix)
+  (let* ([body  (node-body node)]
+	 [angle (- (cp:body-get-angle body))]
+	 [body-pos (cp:body-get-position body)]
+	 [mvp (m* projection-matrix
+		  (m* (translation (make-point (cp:v.x body-pos)
+					       (cp:v.y body-pos)
+					       0))
+		      (m* view-matrix
+			  (rotate-z angle (model-matrix)))))])
+    (render-mesh circle-mesh
+		 (cell-get program1)
+		 mvp
+		 (cp:vlength (cp:body-get-velocity body))
+		 (vector
+		  1
+		  (+ 0.5 (* 0.5 (sin idx)))
+		  (+ 0.5 (* 0.5 (cos idx)))))))
+
+
 (define (add-ball space x y idx #!key (elasticity 0.95) (friction 0.2) (mass 1.) (radius 0.1) (velocity #f))
   (let* ((moment (cp:moment-for-circle mass 0. radius cp:vzero))
 	 (body (cp:space-add-body space (cp:body-new  mass moment)))
@@ -92,25 +118,12 @@
 				     (exact->inexact y)))
     (cp:space-add-shape space shape)
 
+
+
     (when velocity
       (cp:body-set-velocity body velocity))
 
-    (let ([n (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-			 (let ([angle (- (cp:body-get-angle body))]
-			       [body-pos (cp:body-get-position body)])
-			   (render-mesh circle-mesh
-					(cell-get program1)
-					(m* projection-matrix
-					    (m* (translation (make-point (cp:v.x body-pos)
-									 (- (cp:v.y body-pos))
-									 0))
-						(m* view-matrix
-						    (rotate-z angle (model-matrix)))))
-					(cp:vlength (cp:body-get-velocity body))
-					(vector
-					 1
-					 (+ 0.5 (* 0.5 (sin idx)))
-					 (+ 0.5 (* 0.5 (cos idx)))))))
+    (let ([n (new-node (render-ball idx)
 		       body
 		       shape)])
       n)))
@@ -118,11 +131,12 @@
 (define (fixed-line-segment space from to #!key (radius 0.1))
   (cp:segment-shape-new (cp:space-get-static-body space) from to radius))
 
+
 ;;;; Global State
 
 (define the-nodes (box (list)))
 
-(define *mouse-point* (make-parameter (cp:v 0 0)))
+(define the-mouse-v (make-parameter (cp:v 0 0)))
 
 (define the-mouse-ball (make-parameter #f))
 
@@ -140,7 +154,7 @@
 
  (define out (allocate 1))
 
- (define p (cp:space-point-query-nearest the-space (*mouse-point*) 4 ff out))
+ (define p (cp:space-point-query-nearest the-space (the-mouse-v) 4 ff out))
 
  (filter
   (lambda (x) (eq? (node-shape x) p))
@@ -170,7 +184,7 @@
 	       ,(ringbuffer-get b (+ 1 j))))))
 
 
-(include "scene.scm")
+
 
 (define (render-node node projection view ctx-matrix)
   (let ([render-fn (node-render-fn node)])
@@ -192,6 +206,7 @@
 			     #f
 			     #f))
 
+(include "scene.scm")
 
 (node-children-set! root-node '())
 
@@ -223,7 +238,7 @@
 
 (node-children-update! root-node append
 		       (list (the-mouse-ball))
-		       (let ([n 300])
+		       (let ([n 100])
 			 (list-ec (:range i n)
 				  (let ([angle (/ (* pi 2 i 8) n)]
 					[radius (* 2 (/ i n))])
@@ -256,7 +271,7 @@
   (let ([m (cp:body-get-position (node-body (the-mouse-ball)))])
     (node-children-update! root-node append
 			   (list (add-ball the-space (cp:v.x m) (cp:v.y m) (box-swap! the-counter inc)
-					   #:radius 0.4
+					   #:radius 0.2
 					   #:velocity (v-rand 10))))
     m))
 
@@ -269,11 +284,10 @@
 				[angle (+ (/ pi 4) (- (cp:body-get-angle body)))]
 				[body-pos (cp:body-get-position body)]
 				[trans (make-point (cp:v.x body-pos)
-						   (- (cp:v.y body-pos))
+						   (cp:v.y body-pos)
 						   0)])
 			   (render-mesh circle-mesh
 					(cell-get program3)
-
 					(m* projection-matrix
 					    (m* (translation trans)
 						(m* view-matrix
@@ -288,12 +302,11 @@
 			      [pos-b (cp:body-get-position (cp:constraint-get-body-b constraint))]
 			      [angle (cp:vtoangle (cp:v- pos-a pos-b))]
 			      [middle (cp:vlerp pos-a pos-b 0.5)]
-			      [trans (make-point (cp:v.x middle) (- (cp:v.y  middle))
+			      [trans (make-point (cp:v.x middle) (cp:v.y  middle)
 						 0.)])
 
-
-			 (mesh-update! the-line-mesh (line-mesh-vertices (cp:v.x pos-a) (- (cp:v.y pos-a))
-									 (cp:v.x pos-b) (- (cp:v.y pos-b))))
+			 (mesh-update! the-line-mesh (line-mesh-vertices (cp:v.x pos-a) (cp:v.y pos-a)
+									 (cp:v.x pos-b) (cp:v.y pos-b)))
 
 			 (render-mesh the-line-mesh
 				      (cell-get program-line)
@@ -303,18 +316,46 @@
 
 (define edges
   (list->vector
-   (list-ec (:list x (circle-ring 24))
+   (list-ec (:list x (circle-ring 64))
 	    (let* ([start (first x)]
 		   [end (second x)]
 		   [start-pos (cp:v (car start) (cdr start))]
 		   [end-pos (cp:v (car end) (cdr end))]
 		   [center-pos (cp:vlerp start-pos end-pos 0.5)]
 		   [mass 0.3]
-		   [radius 0.3]
+		   [radius 0.2]
 		   [body-center (cp:body-new (cp:moment-for-segment mass start-pos end-pos radius) mass)]
 		   [shape (cp:circle-shape-new body-center radius cp:vzero)])
 
 	      (cp:body-set-position body-center center-pos)
+	      (cp:space-add-body the-space body-center)
+	      (cp:space-add-shape the-space shape)
+
+	      (node-children-update! root-node
+			 (cut cons
+			   (let* ([body body-center])
+			     (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+					 ((*render-circle-shape*) projection-matrix view-matrix shape))
+				       body
+				       shape))
+			   <>))
+	      `((body-center . ,body-center)
+		(shape . ,shape))))))
+
+(define edges-inner
+  (list->vector
+   (list-ec (:list x (circle-ring 32))
+	    (let* ([start (first x)]
+		   [end (second x)]
+		   [start-pos (cp:v (car start) (cdr start))]
+		   [end-pos (cp:v (car end) (cdr end))]
+		   [center-pos (cp:vlerp start-pos end-pos 0.5)]
+		   [mass 0.3]
+		   [radius 0.15]
+		   [body-center (cp:body-new (cp:moment-for-segment mass start-pos end-pos radius) mass)]
+		   [shape (cp:circle-shape-new body-center radius cp:vzero)])
+
+	      (cp:body-set-position body-center (cp:vmult center-pos 0.5))
 	      (cp:space-add-body the-space body-center)
 	      (cp:space-add-shape the-space shape)
 
@@ -337,9 +378,6 @@
 (define (add-constraint x)
   (set! constraints (cons x constraints))
   x)
-
-
-
 
 (define (damped-spring-update-stiffness spring f . args)
   (let ([new (apply f (cp:damped-spring-get-stiffness spring) args)])
@@ -367,8 +405,9 @@
 
  )
 
+;; outer shell
 (for-each (cut cp:space-add-constraint the-space <>)
-	  (append-ec (:list offset '(1 3 9 11))
+	  (append-ec (:list offset '(1 2 3 7))
 		     (:range i 0 (vector-length edges))
 		   (let* ([current (vector-ref edges i)]
 			  [before (vector-ref edges (% (+ i offset) (vector-length edges)))]
@@ -399,9 +438,46 @@
 					     ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint))))))
 		     (list constraint rot-constraint))))
 
+(define (outer-for-inner i)
+  (list (- (* 2 i) 1) (* 2 i)))
+
+;; outer -> inner
+(for-each (cut cp:space-add-constraint the-space <>)
+	  (append-ec (:range i 0 (vector-length edges-inner))
+		     (:list outer (outer-for-inner i))
+		   (let* ([current (vector-ref edges-inner i)]
+			  [before (vector-ref edges (% outer (vector-length edges)))]
+			  [body-current (alist-ref 'body-center current)]
+			  [body-before (alist-ref 'body-center before)]
+			  [constraint (add-constraint (cp:damped-spring-new
+						       body-before
+						       body-current
+						       cp:v0
+						       cp:v0
+						       (cp:vlength (cp:v- (cp:body-get-position body-before)
+									  (cp:body-get-position body-current)))
+						       100.
+						       the-damping))]
+			  [rot-constraint (cp:damped-rotary-spring-new
+					   body-before
+					   body-current
+					   (cp:vtoangle (cp:v- (cp:body-get-position body-before)
+							       (cp:body-get-position body-current)))
+					   100.
+					   the-damping
+					   )])
+		     (node-children-update! root-node
+		      (cut append <>
+			   (list (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+					     ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+				 (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+					     ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint))))))
+		     (list constraint rot-constraint))))
+
+
 (define rcs
   (let* ([poss (map (lambda (x) (cp:body-get-position (alist-ref 'body-center x)))
-		    (vector->list edges))]
+		    (vector->list edges-inner))]
 	 [il (/ 1 (length poss))]
 	 [center-pos (cp:v* (reduce cp:v+ (cp:v 0. 0.) poss) il)]
 	 [body-center (cp:body-new 10. 20.)]
@@ -413,17 +489,17 @@
     (cp:space-add-shape the-space shape)
 
     (node-children-update! root-node
-	       (cut cons
-		 (let* ([body body-center])
-		   (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-			       ((*render-circle-shape*) projection-matrix view-matrix shape))
-			     body
-			     shape))
-		 <>))
+			   (cut cons
+			     (let* ([body body-center])
+			       (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+					   ((*render-circle-shape*) projection-matrix view-matrix shape))
+					 body
+					 shape))
+			     <>))
 
-    (append-ec (:range i 0 (vector-length edges))
-	       (let* ([current (vector-ref edges i)]
-		      [before (vector-ref edges (% (+ i 1) (vector-length edges)))]
+    (append-ec (:range i 0 (vector-length edges-inner))
+	       (let* ([current (vector-ref edges-inner i)]
+		      [before (vector-ref edges-inner (% (+ i 1) (vector-length edges-inner)))]
 		      [body-current (alist-ref 'body-center current)]
 		      [constraint (add-constraint (cp:damped-spring-new
 						   body-center
@@ -443,14 +519,20 @@
 				       100.
 				       the-damping)])
 		 (node-children-update! root-node append
-			    (list (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					      ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
-				  (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					      ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))))
+					(list (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+							  ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+					      (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+							  ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))))
 
 		 (list constraint rot-constraint)))))
 
+;; 1 -> 1 2
+;; 2 -> 3 4
+
+
 (for-each (cut cp:space-add-constraint the-space <>)  rcs)
+
+;(for-each (cut cp:space-add-constraint the-space <>)  outer-inner)
 
 (define (clear-space space)
   (for-each (cut cp:space-remove-body the-space <>) (cp:space-bodies the-space)))
@@ -460,26 +542,40 @@
 
 ;;; Camera
 
-(define projection-matrix (make-parameter (perspective 600 600 0.1 100 70)))
+(define camera-position (box (make-point 0. 0. 0.)))
+
+(define camera-zoom (box 1))
 
 
-(define the-eye-point (make-parameter (make-point 0 0 70)))
 
-(define the-object-point
-  (box (make-point 0 0 0)))
+;;(define projection-matrix (make-parameter (perspective 600 600 1 10 70)))
+(define projection-matrix (make-parameter (ortho 10 10  0.1 100)))
+
+(projection-matrix
+ (ortho 10 10  0.1 100))
+
+(define the-eye-point (make-parameter (make-point 0 0 5)))
+
+(the-eye-point (make-point 0 0 5))
+
+(define the-object-point (make-parameter (make-point 0 0 0)))
+
+(the-object-point (make-point 0 0 0))
+
 
 (define (view-matrix)
   (look-at (the-eye-point)
-	   (unbox the-object-point)
-           (make-point 0 1 0) ; up vector
+	   (the-object-point)
+	   (make-point 0 1 0) ; up vector
 	   ))
+
 
 (define (model-matrix)
   (mat4-identity))
 
 ;;;  Meshes
 
-(define circle-mesh (disk 60))
+(define circle-mesh (disk 20))
 
 (define rectangle-mesh rect)
 
@@ -508,22 +604,9 @@
 
 ;;; Window setup
 
-(define (screen->world xy)
-  (let* ([x (car xy)]
-	 [y (cdr xy)]
-	 [v (view-matrix)]
-	 [p (projection-matrix)]
-	 [world->screen (m* v p)]
-	 [m-screen->world (inverse world->screen)])
-    (m*vector! m-screen->world (make-point x y 1))))
+
 
 (include "input.scm")
-
-(define (set-gravity)
-  (let ([v (screen->world (the-mouse-pos))])
-    (cp:space-set-gravity the-space
-			  (cp:v (f32vector-ref v 0)
-				(f32vector-ref v 1)))))
 
 (define (update-gravity f . args)
   (let ([new-gravity (apply f (cp:space-get-gravity the-space) args)])
@@ -559,6 +642,10 @@
 		   `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
 		     (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
 
+   (mesh-make-vao! square-mesh
+		   `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
+		     (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
+
    (mesh-make-vao! rectangle-mesh
 		   `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
 		     (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
@@ -581,12 +668,9 @@
 
 (on-frame (lambda (dt)
 
-	   ;; set mouse position
-	   (let* ([p (screen->world (the-mouse-pos))]
-		  [mouse-x (f32vector-ref p 0)]
-		  [mouse-y (f32vector-ref p 1)])
-	     (cp:body-set-position (node-body (the-mouse-ball))
-				   (cp:v mouse-x mouse-y)))
+	   ;; set cursor ball
+	   (cp:body-set-position (node-body (the-mouse-ball))
+				 (the-mouse-v))
 
  	   ;; process repl event
 	   (REPL)
@@ -617,6 +701,7 @@
 
  )
 
+
 (define main-thread (make-thread main))
 
 
@@ -625,6 +710,7 @@
 (define mt (thread-start! main-thread))
 
 
+; (repl)
 
 (comment (thread-terminate! mt )
 
