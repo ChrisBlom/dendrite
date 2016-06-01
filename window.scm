@@ -40,7 +40,7 @@
 (define the-line-mesh (line-mesh '(0 0) '(0 0)))
 
 (when (unbound? 'REPL)
-  (define repl-port 6060)
+  (define repl-port 6061)
   (define REPL (make-prepl repl-port)))
 
 (include "pipeline.scm")
@@ -51,7 +51,22 @@
 (define the-space #f)
 
 
-(define-record node render-fn children matrix body shape id) ; takes node , mvp ,
+(define-record node
+  render-fn ;; takes node , mvp
+  children ;; list of nodes
+  matrix
+  body				;; optional
+  shape 				;; optional
+  id
+  inputs ;; list of links
+  outputs ;; list of links
+  )
+
+
+(define-record link
+  (setter source)				;; node
+  (setter target)				; node
+  (setter buffer))
 
 (define all-nodes '())
 
@@ -65,14 +80,16 @@
 	    v)]))
 
 
-
 (define (new-node render-fn #!optional (body #f) (shape #f) (id #f))
   (let ([n (make-node render-fn
 		      '()
 		      (mat4-identity)
 		      body
 		      shape
-		      (or id (box-swap! the-counter inc)))])
+		      (or id (box-swap! the-counter inc))
+		      '()
+		      '()
+		      )])
     (update! all-nodes conj n)
     n))
 
@@ -199,12 +216,8 @@
 		(node-children node)))))
 
 ;; set root node
-(define root-node (make-node (lambda (x v p c) #f)
-			     '()
-			     (mat4-identity)
-			     #f
-			     #f
-			     #f))
+(define root-node (new-node (lambda (x v p c) #f)
+			   #f #f))
 
 (include "scene.scm")
 
@@ -314,6 +327,26 @@
 				      (cp:constraint-get-impulse constraint)
 				      (vector 1 0 1)))))
 
+
+(define *render-link* (make-parameter #f))
+
+(*render-link* (lambda (projection-matrix view-matrix ctx-matrix src trg)
+		 (let* ([pos-a (cp:body-get-position src)]
+			[pos-b (cp:body-get-position trg)]
+			[angle (cp:vtoangle (cp:v- pos-a pos-b))]
+			[middle (cp:vlerp pos-a pos-b 0.5)]
+			[trans (make-point (cp:v.x middle) (cp:v.y  middle)
+					   0.)])
+
+		   (mesh-update! the-line-mesh (line-mesh-vertices (cp:v.x pos-a) (cp:v.y pos-a)
+								   (cp:v.x pos-b) (cp:v.y pos-b)))
+
+		   (render-mesh the-line-mesh
+				(cell-get program-line)
+				(m* projection-matrix (m* view-matrix (model-matrix)))
+				(cp:constraint-get-impulse constraint)
+				(vector 1 1 0)))))
+
 (define edges
   (list->vector
    (list-ec (:list x (circle-ring 64))
@@ -330,17 +363,15 @@
 	      (cp:body-set-position body-center center-pos)
 	      (cp:space-add-body the-space body-center)
 	      (cp:space-add-shape the-space shape)
-
-	      (node-children-update! root-node
-			 (cut cons
-			   (let* ([body body-center])
-			     (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					 ((*render-circle-shape*) projection-matrix view-matrix shape))
-				       body
-				       shape))
-			   <>))
-	      `((body-center . ,body-center)
-		(shape . ,shape))))))
+	      (let* ([n (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+				     ((*render-circle-shape*) projection-matrix view-matrix shape))
+				   body-center
+				   shape)])
+		(node-children-update! root-node (cut cons n <>))
+		`((body-center . ,body-center)
+		  (shape . ,shape))
+		n
+		)))))
 
 (define edges-inner
   (list->vector
@@ -358,17 +389,17 @@
 	      (cp:body-set-position body-center (cp:vmult center-pos 0.5))
 	      (cp:space-add-body the-space body-center)
 	      (cp:space-add-shape the-space shape)
+	      (let* ([edge-node (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+					     ((*render-circle-shape*) projection-matrix view-matrix shape))
+					   body-center
+					   shape)])
+		(node-children-update! root-node (cut cons edge-node <>))
 
-	      (node-children-update! root-node
-			 (cut cons
-			   (let* ([body body-center])
-			     (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					 ((*render-circle-shape*) projection-matrix view-matrix shape))
-				       body
-				       shape))
-			   <>))
-	      `((body-center . ,body-center)
-		(shape . ,shape))))))
+		`((body-center . ,body-center)
+		  (shape . ,shape))
+
+		edge-node)))))
+
 
 (define the-damping 0.4)
 
@@ -378,16 +409,6 @@
 (define (add-constraint x)
   (set! constraints (cons x constraints))
   x)
-
-(define (damped-spring-update-stiffness spring f . args)
-  (let ([new (apply f (cp:damped-spring-get-stiffness spring) args)])
-    (cp:damped-spring-set-stiffness spring new)
-    new))
-
-(define (damped-spring-update-damping spring f . args)
-  (let ([new (apply f (cp:damped-spring-get-damping spring) args)])
-    (cp:damped-spring-set-damping spring new)
-    new))
 
 (define (update-stiffness delta)
   (map
@@ -401,6 +422,8 @@
 
 (comment
 
+ (cp:constraint-get-type (first (cp:space-constraints the-space)))
+
  (update-stiffness 10)
 
  )
@@ -411,8 +434,41 @@
 		     (:range i 0 (vector-length edges))
 		   (let* ([current (vector-ref edges i)]
 			  [before (vector-ref edges (% (+ i offset) (vector-length edges)))]
-			  [body-current (alist-ref 'body-center current)]
-			  [body-before (alist-ref 'body-center before)]
+			  [body-current (node-body current)]
+			  [body-before (node-body before)]
+			  [constraint (add-constraint (cp:damped-spring-new
+						       body-before
+						       body-current
+						       cp:v0
+						       cp:v0
+						       (cp:vlength (cp:v- (cp:body-get-position body-before)
+									  (cp:body-get-position body-current)))
+						       100.
+						       the-damping))]
+			  [rot-constraint (cp:damped-rotary-spring-new
+					   body-before
+					   body-current
+					   (cp:vtoangle (cp:v- (cp:body-get-position body-before)
+							       (cp:body-get-position body-current)))
+					   100.
+					   the-damping
+					   )])
+		     (node-children-update! root-node
+		      (cut append <>
+			   (list (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+					     ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+				 (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+					     ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint))))))
+		     (list constraint rot-constraint))))
+
+;; inner shell
+(for-each (cut cp:space-add-constraint the-space <>)
+	  (append-ec (:list offset '(1 2 5))
+		     (:range i 0 (vector-length edges-inner))
+		     (let* ([current (./trace (vector-ref edges-inner i))]
+			    [before (./trace (vector-ref edges-inner (% (+ i offset) (vector-length edges-inner))))]
+			  [body-current (node-body current)]
+			  [body-before (node-body before)]
 			  [constraint (add-constraint (cp:damped-spring-new
 						       body-before
 						       body-current
@@ -445,10 +501,10 @@
 (for-each (cut cp:space-add-constraint the-space <>)
 	  (append-ec (:range i 0 (vector-length edges-inner))
 		     (:list outer (outer-for-inner i))
-		   (let* ([current (vector-ref edges-inner i)]
-			  [before (vector-ref edges (% outer (vector-length edges)))]
-			  [body-current (alist-ref 'body-center current)]
-			  [body-before (alist-ref 'body-center before)]
+		     (let* ([current (./trace 'a (vector-ref edges-inner i))]
+			    [before (./trace 'a (vector-ref edges (% outer (vector-length edges))))]
+			  [body-current (node-body current)]
+			  [body-before (node-body before)]
 			  [constraint (add-constraint (cp:damped-spring-new
 						       body-before
 						       body-current
@@ -474,9 +530,30 @@
 					     ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint))))))
 		     (list constraint rot-constraint))))
 
+(use ringbuffer)
+
+;; TODO add to common ancestor of src and trg
+(define (link-add src trg n)
+
+  (let ([buffer (new-ringbuffer n)]
+	[link (make-link src trg buffer)])
+    (update! (node-outputs src) (conj link))
+    (update! (node-inputs trg) (conj link))
+    link))
+
+;; outer -> inner links
+;; (append-ec (:range i 0 (vector-length edges-inner))
+;; 	   (:list outer (outer-for-inner i))
+;; 	   (let* ([current (vector-ref edges-inner i)]
+;; 		  [before (vector-ref edges (% outer (vector-length edges)))]
+;; 		  [body-current (alist-ref 'body-center current)]
+;; 		  [body-before (alist-ref 'body-center before)])
+;; 	     (node-children-append! root-node
+;; 				    (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+;; 						((*render-link*) projection-matrix view-matrix ctx-matrix src trg))))))
 
 (define rcs
-  (let* ([poss (map (lambda (x) (cp:body-get-position (alist-ref 'body-center x)))
+  (let* ([poss (map (lambda (x) (cp:body-get-position (node-body x)))
 		    (vector->list edges-inner))]
 	 [il (/ 1 (length poss))]
 	 [center-pos (cp:v* (reduce cp:v+ (cp:v 0. 0.) poss) il)]
@@ -500,7 +577,7 @@
     (append-ec (:range i 0 (vector-length edges-inner))
 	       (let* ([current (vector-ref edges-inner i)]
 		      [before (vector-ref edges-inner (% (+ i 1) (vector-length edges-inner)))]
-		      [body-current (alist-ref 'body-center current)]
+		      [body-current (node-body current)]
 		      [constraint (add-constraint (cp:damped-spring-new
 						   body-center
 						   body-current
@@ -518,11 +595,13 @@
 							   (cp:body-get-position body-current)))
 				       100.
 				       the-damping)])
-		 (node-children-update! root-node append
-					(list (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-							  ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
-					      (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-							  ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))))
+
+		 (let ([c (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+				      ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))]
+		       [rc (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+				       ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))])
+		   (node-children-update! root-node append
+					  (list c rc)))
 
 		 (list constraint rot-constraint)))))
 
@@ -563,11 +642,11 @@
 (the-object-point (make-point 0 0 0))
 
 
-(define (view-matrix)
-  (look-at (the-eye-point)
-	   (the-object-point)
-	   (make-point 0 1 0) ; up vector
-	   ))
+(define view-matrix
+  (make-parameter (look-at (the-eye-point)
+			   (the-object-point)
+			   (make-point 0 1 0) ; up vector
+	    )))
 
 
 (define (model-matrix)
@@ -710,7 +789,7 @@
 (define mt (thread-start! main-thread))
 
 
-; (repl)
+(repl)
 
 (comment (thread-terminate! mt )
 

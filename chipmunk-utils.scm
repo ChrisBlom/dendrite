@@ -41,3 +41,13 @@
 	     (./trace damping))])
     (./trace c)
     ))
+
+(define (damped-spring-update-stiffness spring f . args)
+  (let ([new (apply f (cp:damped-spring-get-stiffness spring) args)])
+    (cp:damped-spring-set-stiffness spring new)
+    new))
+
+(define (damped-spring-update-damping spring f . args)
+  (let ([new (apply f (cp:damped-spring-get-damping spring) args)])
+    (cp:damped-spring-set-damping spring new)
+    new))
