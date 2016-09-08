@@ -31,6 +31,9 @@
 
 (define the-counter (box 0))
 
+(define (next-id)
+  (box-swap! the-counter inc))
+
 ;;;;; Utils ;;;;;
 
 (include "utils.scm")
@@ -86,7 +89,7 @@
 		      (mat4-identity)
 		      body
 		      shape
-		      (or id (box-swap! the-counter inc))
+		      (or id (next-id))
 		      '()
 		      '()
 		      )])
@@ -283,7 +286,7 @@
 					;   space x y idx
   (let ([m (cp:body-get-position (node-body (the-mouse-ball)))])
     (node-children-update! root-node append
-			   (list (add-ball the-space (cp:v.x m) (cp:v.y m) (box-swap! the-counter inc)
+			   (list (add-ball the-space (cp:v.x m) (cp:v.y m) (next-id)
 					   #:radius 0.2
 					   #:velocity (v-rand 10))))
     m))
