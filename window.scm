@@ -29,6 +29,7 @@
 (include "utils.scm")
 (include "mesh.scm")
 (include "chipmunk-utils.scm")
+(include "reactive.scm")
 (include "pipeline.scm")
 (include "nodes.scm")
 
@@ -144,17 +145,11 @@
 
 (define (init-physics)
   (let ([space (cp:space-new)])
-
-    (cp:space-set-iterations space 30) ; 10 default
-
+    (cp:space-set-iterations space 10) ; 10 default
     (scene-1 space)
-
     (the-mouse-ball (add-ball space 10. 10. 0 #:radius 0.2 #:friction 0.01))
-
     (node-children-update! root-node append
 			   (list (the-mouse-ball)))
-
-    ;; return space
     space))
 
 (set! the-space (init-physics))
@@ -180,8 +175,6 @@
 					   #:radius 0.2
 					   #:velocity (v-rand 10))))
     m))
-
-
 
 (define *render-circle-shape* (make-parameter #f))
 
@@ -221,7 +214,6 @@
 				      (m* projection-matrix (m* view-matrix (model-matrix)))
 				      (cp:constraint-get-impulse constraint)
 				      (vector 1 0 1)))))
-
 
 (define *render-link* (make-parameter #f))
 

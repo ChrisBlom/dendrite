@@ -181,19 +181,6 @@
   (recompute-dependents cell)
   cell)
 
-
-;; (let* ([a (create-cell 1)]
-;;        [b (create-cell 2)]
-;;        [c (create-cell 3)]
-;;        [d (create-cell 4)]
-;;        [e (create-cell 5)]
-;;        [f (create-cell + a b c d e)])
-;;   (display
-;;    (list (cell-get f)
-;; 	 (cell-set! a 10)
-;; 	 (cell-get f))))
-
-
 (define (file-cell file)
   (define fcell (create-cell file))
   (define (tsleep n)
@@ -213,8 +200,6 @@
 	 (loop newtime)))))
   fcell)
 
-
-
 (define (circle-ring n)
   (let ([b (list->ringbuffer
 	    (map (lambda (i)
@@ -231,7 +216,6 @@
   (let ([sz 10000])
     (* n (- (* 2 (/ (random sz) sz)) 1))))
 
-
 (define (without list elem)
   (remove (cut eq? elem <>) list))
 
@@ -239,30 +223,3 @@
   (if (positive? n)
     (cons (f) (repeatedly (- n 1) f))
     '()))
-;; (define v1 (file-cell "vertex-shaders/v1.glsl"))
-
-;; (define v1-string (create-cell read-all v1))
-
-
-
-;; (comment
-
-
-;;  (define line-vertex-string
-;;    (let ([cell (create-cell (read-all "vertex-file.glsl"))])
-;;      (change-watcher "vertex-file.glsl"
-;; 		     (lambda (new-value) (set-cell! cell new-value)))
-;;      cell))
-
-;;  (define-cell (link-shader line-vertex-string
-;; 			   line-fragment-string)
-;;    (compile-shader line-vertex-string
-;; 		   line-fragment-string))
-
-
-
-
-
-
-
-;;  )
