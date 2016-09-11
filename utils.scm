@@ -65,6 +65,45 @@
        (printf "---------------- \n" )
        (cdr (last name-to-val)))]))
 
+(define-syntax update!
+  (syntax-rules ()
+    [(update! field f x ...)
+     (let ([result (f field x ...)])
+       (set! field result)
+       ;; TODO avoid using eval
+       (eval (cadr `field)))]))
+
+
+(define-syntax (define-gs-record x r c)
+  (let ((type (cadr x))
+        (fields (cddr x))
+ (%begin (r 'begin))
+ (%define-record (r 'define-record))
+ (%define (r 'define))
+ (%getter-with-setter (r 'getter-with-setter)))
+    `(,%begin
+      (,%define-record ,type ,@fields)
+      ,@(map (lambda (f)
+	(let* ((getter (string->symbol
+			(string-append
+			 (symbol->string
+			  (strip-syntax type))
+			 "-"
+			 (symbol->string
+			  (strip-syntax f)))))
+	       (setter (string->symbol
+			(string-append
+			 (symbol->string
+			  (strip-syntax getter))
+			 "-set!"))))
+	  (list %define getter (list %getter-with-setter getter setter))))
+      fields))))
+
+(define-gs-record foo2 a)
+
+(let ([x (make-foo2 1)])
+  (set! (foo2-a x) 2))
+
 (define-syntax define-box
   (syntax-rules ()
     [(_ f body)
@@ -188,9 +227,18 @@
 	      ,(ringbuffer-get b (+ 1 j))))
 	 (range 0 n))))
 
+(define (rand n)
+  (let ([sz 10000])
+    (* n (- (* 2 (/ (random sz) sz)) 1))))
 
 
+(define (without list elem)
+  (remove (cut eq? elem <>) list))
 
+(define (repeatedly n f)
+  (if (positive? n)
+    (cons (f) (repeatedly (- n 1) f))
+    '()))
 ;; (define v1 (file-cell "vertex-shaders/v1.glsl"))
 
 ;; (define v1-string (create-cell read-all v1))

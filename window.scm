@@ -1,12 +1,5 @@
 (import chicken scheme)
 
-;;
-(require-extension apropos)
-(require-extension chicken-doc)
-(require-extension parley)
-(require-extension parley-auto-completion)
-
-
 (use (prefix glfw3 glfw:)
      (prefix opengl-glew gl:)
      (prefix gl opengl:)
@@ -28,7 +21,6 @@
      extras)
 
 
-
 (define the-counter (box 0))
 
 (define (next-id)
@@ -39,72 +31,30 @@
 (include "utils.scm")
 (include "mesh.scm")
 (include "chipmunk-utils.scm")
-
-(define the-line-mesh (line-mesh '(0 0) '(0 0)))
+(include "pipeline.scm")
+(include "nodes.scm")
 
 (when (unbound? 'REPL)
   (define repl-port 6061)
   (define REPL (make-prepl repl-port)))
 
-(include "pipeline.scm")
+;;;; Globals
 
-;;;;; Physics ;;;;;
-
-;; TODO perform physics in a separate thread
 (define the-space #f)
 
+;;;; Balls
 
-(define-record node
-  render-fn ;; takes node , mvp
-  children ;; list of nodes
-  matrix
-  body				;; optional
-  shape 				;; optional
-  id
-  inputs ;; list of links
-  outputs ;; list of links
-  )
-
-
-(define-record link
-  (setter source)				;; node
-  (setter target)				; node
-  (setter buffer))
-
-(define all-nodes '())
-
-(define (conj list elem)
-  (cons elem list))
-
-(define-syntax update!
-  (syntax-rules ()
-    [(_ v f x ...)
-     (begin (set! v (f v x ...))
-	    v)]))
-
-
-(define (new-node render-fn #!optional (body #f) (shape #f) (id #f))
-  (let ([n (make-node render-fn
-		      '()
-		      (mat4-identity)
-		      body
-		      shape
-		      (or id (next-id))
-		      '()
-		      '()
-		      )])
-    (update! all-nodes conj n)
-    n))
-
-(define (node-children-update! node f . args)
-  (node-children-set! node (apply f (node-children node) args)))
-
-(define (node-children-append! node . children)
-  (node-children-update! node append children))
-
-
-
-
+(define (render-node node projection view ctx-matrix)
+  (let ([render-fn (node-render-fn node)])
+    (render-fn node
+	       projection
+	       (m* ctx-matrix view)
+	       ctx-matrix)
+    ;; render children with sub-ctx
+    (let ([sub-ctx (m* (node-matrix node) ctx-matrix)])
+      (for-each (lambda (child)
+		  (render-node child projection view sub-ctx))
+		(node-children node)))))
 
 (define ((render-ball idx)  node projection-matrix view-matrix ctx-matrix)
   (let* ([body  (node-body node)]
@@ -125,11 +75,10 @@
 		  (+ 0.5 (* 0.5 (sin idx)))
 		  (+ 0.5 (* 0.5 (cos idx)))))))
 
-
 (define (add-ball space x y idx #!key (elasticity 0.95) (friction 0.2) (mass 1.) (radius 0.1) (velocity #f))
-  (let* ((moment (cp:moment-for-circle mass 0. radius cp:vzero))
+  (let* ((moment (cp:moment-for-circle mass 0. radius cp:v0))
 	 (body (cp:space-add-body space (cp:body-new  mass moment)))
-	 (shape (cp:circle-shape-new body radius cp:vzero)))
+	 (shape (cp:circle-shape-new body radius cp:v0)))
 
     (cp:shape-set-friction shape friction)
     (cp:shape-set-elasticity shape elasticity)
@@ -148,10 +97,6 @@
 		       shape)])
       n)))
 
-(define (fixed-line-segment space from to #!key (radius 0.1))
-  (cp:segment-shape-new (cp:space-get-static-body space) from to radius))
-
-
 ;;;; Global State
 
 (define the-nodes (box (list)))
@@ -160,13 +105,11 @@
 
 (define the-mouse-ball (make-parameter #f))
 
-(define (node-descendants node)
-  (let ([children (node-children node)])
-    (if (null-list? children)
-	'())
-    (apply append
-	   children
-	   (map node-descendants children))))
+;; set root node
+(define root-node (new-node (lambda (x v p c) #f)
+			   #f #f))
+
+(node-children-set! root-node '())
 
 (comment
 
@@ -190,7 +133,6 @@
 
 )
 
-
 ;;;; Scene Setup
 
 (define (circle-ring n)
@@ -204,27 +146,9 @@
 	       ,(ringbuffer-get b (+ 1 j))))))
 
 
-
-
-(define (render-node node projection view ctx-matrix)
-  (let ([render-fn (node-render-fn node)])
-    (render-fn node
-	       projection
-	       (m* ctx-matrix view)
-	       ctx-matrix)
-    ;; render children with sub-ctx
-    (let ([sub-ctx (m* (node-matrix node) ctx-matrix)])
-      (for-each (lambda (child)
-		  (render-node child projection view sub-ctx))
-		(node-children node)))))
-
-;; set root node
-(define root-node (new-node (lambda (x v p c) #f)
-			   #f #f))
-
 (include "scene.scm")
 
-(node-children-set! root-node '())
+;;;; Physics
 
 (define (init-physics)
   (let ([space (cp:space-new)])
@@ -243,15 +167,7 @@
 
 (set! the-space (init-physics))
 
-
-
-(define (rand n)
-  (let ([sz 10000])
-    (* n (- (* 2 (/ (random sz) sz)) 1))))
-
-(define (v-rand n)
-  (f64vector (rand n) (rand n)))
-
+;; add ball attached to cursor
 (node-children-update! root-node append
 		       (list (the-mouse-ball))
 		       (let ([n 100])
@@ -264,26 +180,8 @@
 					      i
 					      #:radius 0.1)))))
 
-
-(define (without list elem)
-  (remove (cut eq? elem <>) list))
-
-(define (remove-node parent node)
-;  (for-each (cut remove-node node <>) (node-children node))
-  (node-children-update! parent without node)
-  (when (node-body node) (cp:space-remove-body the-space (node-body p)))
-  (when (node-shape node)  (cp:space-remove-shape the-space (node-shape p))))
-
-
-
-
-(define (repeatedly n f)
-  (if (positive? n)
-    (cons (f) (repeatedly (- n 1) f))
-    '()))
-
+;; inserts a new ball at the current cursor
 (define (add-node-at-pos)
-					;   space x y idx
   (let ([m (cp:body-get-position (node-body (the-mouse-ball)))])
     (node-children-update! root-node append
 			   (list (add-ball the-space (cp:v.x m) (cp:v.y m) (next-id)
@@ -291,7 +189,7 @@
 					   #:velocity (v-rand 10))))
     m))
 
-(define *render-constraint* (make-parameter #f))
+
 
 (define *render-circle-shape* (make-parameter #f))
 
@@ -312,6 +210,8 @@
 					(cp:vlength (cp:body-get-velocity body))
 
 					(vector 1 1 0)))))
+
+(define *render-constraint* (make-parameter #f))
 
 (*render-constraint* (lambda (projection-matrix view-matrix ctx-matrix constraint)
 		       (let* ([pos-a (cp:body-get-position (cp:constraint-get-body-a constraint))]
@@ -361,7 +261,7 @@
 		   [mass 0.3]
 		   [radius 0.2]
 		   [body-center (cp:body-new (cp:moment-for-segment mass start-pos end-pos radius) mass)]
-		   [shape (cp:circle-shape-new body-center radius cp:vzero)])
+		   [shape (cp:circle-shape-new body-center radius cp:v0)])
 
 	      (cp:body-set-position body-center center-pos)
 	      (cp:space-add-body the-space body-center)
@@ -387,7 +287,7 @@
 		   [mass 0.3]
 		   [radius 0.15]
 		   [body-center (cp:body-new (cp:moment-for-segment mass start-pos end-pos radius) mass)]
-		   [shape (cp:circle-shape-new body-center radius cp:vzero)])
+		   [shape (cp:circle-shape-new body-center radius cp:v0)])
 
 	      (cp:body-set-position body-center (cp:vmult center-pos 0.5))
 	      (cp:space-add-body the-space body-center)
@@ -403,25 +303,7 @@
 
 		edge-node)))))
 
-
 (define the-damping 0.4)
-
-(define constraints '())
-
-;; remove, get constrains from space
-(define (add-constraint x)
-  (set! constraints (cons x constraints))
-  x)
-
-(define (update-stiffness delta)
-  (map
-   (lambda (c) (damped-spring-update-stiffness c + delta))
-   constraints))
-
-(define (update-damping delta)
-  (map
-   (lambda (c) (damped-spring-update-damping c + delta))
-   (cp:space-constraints the-space)))
 
 (comment
 
@@ -468,8 +350,8 @@
 (for-each (cut cp:space-add-constraint the-space <>)
 	  (append-ec (:list offset '(1 2 5))
 		     (:range i 0 (vector-length edges-inner))
-		     (let* ([current (./trace (vector-ref edges-inner i))]
-			    [before (./trace (vector-ref edges-inner (% (+ i offset) (vector-length edges-inner))))]
+		     (let* ([current (vector-ref edges-inner i)]
+			    [before (vector-ref edges-inner (% (+ i offset) (vector-length edges-inner)))]
 			  [body-current (node-body current)]
 			  [body-before (node-body before)]
 			  [constraint (add-constraint (cp:damped-spring-new
@@ -536,13 +418,6 @@
 (use ringbuffer)
 
 ;; TODO add to common ancestor of src and trg
-(define (link-add src trg n)
-
-  (let ([buffer (new-ringbuffer n)]
-	[link (make-link src trg buffer)])
-    (update! (node-outputs src) (conj link))
-    (update! (node-inputs trg) (conj link))
-    link))
 
 ;; outer -> inner links
 ;; (append-ec (:range i 0 (vector-length edges-inner))
@@ -562,7 +437,7 @@
 	 [center-pos (cp:v* (reduce cp:v+ (cp:v 0. 0.) poss) il)]
 	 [body-center (cp:body-new 10. 20.)]
 	 [radius 0.1]
-	 [shape (cp:circle-shape-new body-center radius cp:vzero)])
+	 [shape (cp:circle-shape-new body-center radius cp:v0)])
 
     (cp:body-set-position body-center center-pos)
     (cp:space-add-body the-space body-center)
@@ -610,25 +485,15 @@
 
 ;; 1 -> 1 2
 ;; 2 -> 3 4
-
-
 (for-each (cut cp:space-add-constraint the-space <>)  rcs)
 
-;(for-each (cut cp:space-add-constraint the-space <>)  outer-inner)
-
-(define (clear-space space)
-  (for-each (cut cp:space-remove-body the-space <>) (cp:space-bodies the-space)))
-
-;;;;; Graphics ;;;;;
-
+;;;; Graphics
 
 ;;; Camera
 
 (define camera-position (box (make-point 0. 0. 0.)))
 
 (define camera-zoom (box 1))
-
-
 
 ;;(define projection-matrix (make-parameter (perspective 600 600 1 10 70)))
 (define projection-matrix (make-parameter (ortho 10 10  0.1 100)))
@@ -643,7 +508,6 @@
 (define the-object-point (make-parameter (make-point 0 0 0)))
 
 (the-object-point (make-point 0 0 0))
-
 
 (define view-matrix
   (make-parameter (look-at (the-eye-point)
@@ -686,14 +550,7 @@
 
 ;;; Window setup
 
-
-
 (include "input.scm")
-
-(define (update-gravity f . args)
-  (let ([new-gravity (apply f (cp:space-get-gravity the-space) args)])
-    (cp:space-set-gravity the-space new-gravity)
-    new-gravity))
 
 (define on-frame (make-parameter #f))
 
@@ -747,7 +604,6 @@
 	 (loop (+ 1 i)
 	       now))))))
 
-
 (on-frame (lambda (dt)
 
 	   ;; set cursor ball
@@ -760,7 +616,6 @@
 	   ;; advance physics
 	   (cp:space-step the-space 1/60 )
 
-
 	   ;; draw all nodes
 	   (glfw:swap-buffers (glfw:window))
 	   (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
@@ -771,44 +626,28 @@
 			(m*s (mat4-identity) 2))
 
 	   ;; after render
-
 	   (check-error)
 	   (glfw:poll-events) ; Because of the context version, initializing GLEW results in a harmless invalid enum
 
 	   (thread-yield!)))
 
-(comment
-
- (remove-node root-node (the-mouse-ball))
-
- )
-
-
-(define main-thread (make-thread main))
-
-
-(use soil)
-
-(define mt (thread-start! main-thread))
-
+(define main-thread (thread-start! (make-thread main)))
 
 (repl)
 
-(comment (thread-terminate! mt )
+(comment
 
+ (thread-terminate! main-thread)
 
-	 (begin (update-gravity cp:v+ (cp:v 0. 1.))
+ (update-gravity cp:v+ (cp:v 0. 1.))
 
-		(update-gravity (constantly (cp:v 0 0)))
+ (update-gravity (constantly (cp:v 0 0)))
 
-		(cp:space-get-gravity the-space))
+ (cp:space-get-gravity the-space)
 
-	 (unbox foo)
+  (remove-node root-node (the-mouse-ball))
 
-
-	 )
-
-
+ )
 
 ;; Local Variables:
 ;; eval: (eldoc-mode -1)

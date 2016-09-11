@@ -150,3 +150,6 @@
   `((position . ,(list x1 y1 x2 y3))
     (color . (255 255 0
            	  0   255 0))))
+
+
+(define the-line-mesh (line-mesh '(0 0) '(0 0)))

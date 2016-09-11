@@ -51,3 +51,34 @@
   (let ([new (apply f (cp:damped-spring-get-damping spring) args)])
     (cp:damped-spring-set-damping spring new)
     new))
+
+(define (fixed-line-segment space from to #!key (radius 0.1))
+  (cp:segment-shape-new (cp:space-get-static-body space) from to radius))
+
+(define (v-rand n)
+  (f64vector (rand n) (rand n)))
+
+(define constraints '())
+
+;; remove, get constrains from space
+(define (add-constraint x)
+  (set! constraints (cons x constraints))
+  x)
+
+(define (update-stiffness delta)
+  (map
+   (lambda (c) (damped-spring-update-stiffness c + delta))
+   constraints))
+
+(define (update-damping delta)
+  (map
+   (lambda (c) (damped-spring-update-damping c + delta))
+   (cp:space-constraints the-space)))
+
+(define (clear-space space)
+  (for-each (cut cp:space-remove-body the-space <>) (cp:space-bodies the-space)))
+
+(define (update-gravity space f . args)
+  (let ([new-gravity (apply f (cp:space-get-gravity space) args)])
+    (cp:space-set-gravity space new-gravity)
+    new-gravity))

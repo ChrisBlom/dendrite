@@ -41,27 +41,27 @@
 
 (glfw:mouse-button-callback
  (lambda (window button action mods)
-   (./trace (list 'mouse-button window button action mods))
+   ;(./trace (list 'mouse-button window button action mods))
    ((mouse-button-handler) window button action mods)))
 
 ;;;; User:
 
 ;; set key handler
 (define (gravity-controller window key scancode action mods)
-  (when (or (equal? (./trace action) glfw:+press+)
-	    (equal? (./trace action) glfw:+repeat+))
-    (./trace (list  window key scancode action mods))
+  (when (or (equal? action glfw:+press+)
+	    (equal? action glfw:+repeat+))
+    ;(./trace (list  window key scancode action mods))
     (cond [(equal? key glfw:+key-down+)
-	   (update-gravity cp:v+ (cp:v 0.0 -1.0))]
+	   (update-gravity the-space cp:v+ (cp:v 0.0 -1.0))]
 
 	  [(equal? key glfw:+key-up+)
-	   (update-gravity cp:v+ (cp:v 0.0 1.0))]
+	   (update-gravity the-space cp:v+ (cp:v 0.0 1.0))]
 
 	  [(equal? key glfw:+key-left+)
-	   (update-gravity cp:v+ (cp:v -1.0 0.0))]
+	   (update-gravity the-space cp:v+ (cp:v -1.0 0.0))]
 
 	  [(equal? key glfw:+key-right+)
-	   (update-gravity cp:v+ (cp:v 1.0 0.0))]
+	   (update-gravity the-space cp:v+ (cp:v 1.0 0.0))]
 
 	  [(equal? key glfw:+key-equal+)
 	   (parameter-update the-eye-point v- (make-point 0 0 0.1))]
@@ -91,7 +91,6 @@
   (v- (v* window-point 2/600)
       (make-point 1 1 0)))
 
-
 ;; TODO to coordinate transformation properly
 (cursor-position-handler
  (lambda (window xx yy)
@@ -100,9 +99,9 @@
 	  [world-pos (screen->world screen-point)]
 	  [x (point-x world-pos)]
 	  [y (- (point-y world-pos))])
-     (./trace window-point
-	      screen-point
-	      world-pos)
+     (comment (./trace window-point
+		       screen-point
+		       world-pos))
      (the-mouse-v (cp:v x y)))))
 
 (mouse-button-handler
