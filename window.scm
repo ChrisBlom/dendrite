@@ -20,7 +20,6 @@
      matchable
      extras)
 
-
 (define the-counter (box 0))
 
 (define (next-id)
@@ -77,25 +76,19 @@
 
 (define (add-ball space x y idx #!key (elasticity 0.95) (friction 0.2) (mass 1.) (radius 0.1) (velocity #f))
   (let* ((moment (cp:moment-for-circle mass 0. radius cp:v0))
-	 (body (cp:space-add-body space (cp:body-new  mass moment)))
+	 (body (cp:body-new  mass moment))
 	 (shape (cp:circle-shape-new body radius cp:v0)))
+
+    (cp:body-set-position body (cp:v (exact->inexact x) (exact->inexact y)))
+    (when velocity
+      (cp:body-set-velocity body velocity))
+    (cp:space-add-body space body)
 
     (cp:shape-set-friction shape friction)
     (cp:shape-set-elasticity shape elasticity)
-
-    (cp:body-set-position body (cp:v (exact->inexact x)
-				     (exact->inexact y)))
     (cp:space-add-shape space shape)
 
-
-
-    (when velocity
-      (cp:body-set-velocity body velocity))
-
-    (let ([n (new-node (render-ball idx)
-		       body
-		       shape)])
-      n)))
+    (new-node (render-ball idx) body shape)))
 
 ;;;; Global State
 
@@ -386,8 +379,8 @@
 (for-each (cut cp:space-add-constraint the-space <>)
 	  (append-ec (:range i 0 (vector-length edges-inner))
 		     (:list outer (outer-for-inner i))
-		     (let* ([current (./trace 'a (vector-ref edges-inner i))]
-			    [before (./trace 'a (vector-ref edges (% outer (vector-length edges))))]
+		     (let* ([current (vector-ref edges-inner i)]
+			    [before (vector-ref edges (% outer (vector-length edges)))]
 			  [body-current (node-body current)]
 			  [body-before (node-body before)]
 			  [constraint (add-constraint (cp:damped-spring-new
@@ -433,8 +426,8 @@
 (define rcs
   (let* ([poss (map (lambda (x) (cp:body-get-position (node-body x)))
 		    (vector->list edges-inner))]
-	 [il (/ 1 (length poss))]
-	 [center-pos (cp:v* (reduce cp:v+ (cp:v 0. 0.) poss) il)]
+	 [center-pos (cp:v* (reduce cp:v+ cp:v0 poss)
+			    (/ 1 (length poss)))]
 	 [body-center (cp:body-new 10. 20.)]
 	 [radius 0.1]
 	 [shape (cp:circle-shape-new body-center radius cp:v0)])
@@ -480,12 +473,11 @@
 				       ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))])
 		   (node-children-update! root-node append
 					  (list c rc)))
-
 		 (list constraint rot-constraint)))))
 
 ;; 1 -> 1 2
 ;; 2 -> 3 4
-(for-each (cut cp:space-add-constraint the-space <>)  rcs)
+(apply cp:space-add-constraints the-space rcs)
 
 ;;;; Graphics
 
@@ -639,13 +631,11 @@
 
  (thread-terminate! main-thread)
 
- (update-gravity cp:v+ (cp:v 0. 1.))
+ (update-gravity the-space cp:v+ (cp:v 0. 1.))
 
- (update-gravity (constantly (cp:v 0 0)))
+ (update-gravity the-space (constantly (cp:v 0 0)))
 
  (cp:space-get-gravity the-space)
-
-  (remove-node root-node (the-mouse-ball))
 
  )
 
