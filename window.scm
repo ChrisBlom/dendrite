@@ -2,7 +2,6 @@
 
 (use (prefix glfw3 glfw:)
      (prefix opengl-glew gl:)
-     (prefix gl opengl:)
      (prefix chipmunk cp:)
      gl-math
      gl-utils
@@ -556,14 +555,10 @@
 	opengl-profile: glfw:+opengl-core-profile+)
 
    (gl:init)
-   ;; (print (:supported? "GL_ARB_framebuffer_object"))
-
-   ;; enable alpha blending
-   (opengl:gl:Enable gl:+blend+)
-   (opengl:gl:BlendFunc gl:+src-alpha+ gl:+one-minus-src-alpha+ )
+   (gl:enable gl:+blend+)
+   (gl:blend-func gl:+src-alpha+ gl:+one-minus-src-alpha+ )
 
    (start-all-cells)
-
 
 ;   (gl:bind-texture gl:+texture-2d+ (cell-get noise-image-texture))
  ;  (gl:tex-parameteri gl:+texture-2d+ gl:+texture-min-filter+ gl:+linear+)
@@ -586,6 +581,7 @@
 		     (color . ,(gl:get-attrib-location (cell-get program-line) "color")))
 		   #:stream)
 
+   ;; main loop
    (let loop ([i 0]
 	      [pt (current-milliseconds)])
      (let* ([now (current-milliseconds)]
