@@ -1,5 +1,50 @@
-(import matchable)
+(import-for-syntax chicken scheme srfi-1)
+(import chicken scheme matchable)
 (use box)
+
+(define-syntax comment
+  (syntax-rules ()
+    [(comment expr ...)
+     #f]))
+
+(define-syntax update!
+  (ir-macro-transformer
+   (lambda (e r c)
+     (let ([field (cadr e)]
+	   [f (caddr e)]
+	   [args (cdddr e)])
+       `(begin
+	  (set! ,field (,f ,field ,@args))
+	  ,(if (list? field)
+	       (last field)
+	       field))))))
+
+(define-syntax update-slot!
+  (syntax-rules ()
+    ((update-slot! rec slot f args ...)
+     (update! (slot rec) f args ...))))
+
+(comment
+
+ (define x 1)
+
+ x
+
+ (update! x + 1)
+
+ x
+
+ (define-record foo (setter a))
+
+ (define foox (make-foo 1))
+
+ (foo-a foox)
+
+ (foo-a (update! (foo-a foox) + 1))
+
+ (foo-a (update-slot! foox foo-a + 1))
+
+ )
 
 (define % modulo)
 
@@ -47,11 +92,6 @@
   (param (apply f (param) args)))
 
 
-(define-syntax comment
-  (syntax-rules ()
-    [(comment expr ...)
-     #f]))
-
 (define-syntax ./trace
   (syntax-rules ()
     [(_ a ...)
@@ -65,44 +105,21 @@
        (printf "---------------- \n" )
        (cdr (last name-to-val)))]))
 
-(define-syntax update!
-  (syntax-rules ()
-    [(update! field f x ...)
-     (let ([result (f field x ...)])
-       (set! field result)
-       ;; TODO avoid using eval
-       (eval (cadr `field)))]))
-
-
 (define-syntax (define-gs-record x r c)
   (let ((type (cadr x))
         (fields (cddr x))
- (%begin (r 'begin))
- (%define-record (r 'define-record))
- (%define (r 'define))
- (%getter-with-setter (r 'getter-with-setter)))
+	(%begin (r 'begin))
+	(%define-record (r 'define-record))
+	(%define (r 'define))
+	(%getter-with-setter (r 'getter-with-setter)))
     `(,%begin
       (,%define-record ,type ,@fields)
       ,@(map (lambda (f)
-	(let* ((getter (string->symbol
-			(string-append
-			 (symbol->string
-			  (strip-syntax type))
-			 "-"
-			 (symbol->string
-			  (strip-syntax f)))))
-	       (setter (string->symbol
-			(string-append
-			 (symbol->string
-			  (strip-syntax getter))
-			 "-set!"))))
-	  (list %define getter (list %getter-with-setter getter setter))))
-      fields))))
+	       (let* ((getter (symbol-append (strip-syntax type) '- (strip-syntax f)))
+		      (setter (symbol-append (strip-syntax getter) '-set!)))
+		 (list %define getter (list %getter-with-setter getter setter))))
+	     fields))))
 
-(define-gs-record foo2 a)
-
-(let ([x (make-foo2 1)])
-  (set! (foo2-a x) 2))
 
 (define-syntax define-box
   (syntax-rules ()
@@ -118,87 +135,6 @@
 	      (display " "))
 	    args)
   (newline))
-
-(define-record cell
-  box
-  fn
-  ins
-  outs
-  paused)
-
-
-(define (cell-get cell)
-  (unbox (cell-box cell)))
-
-(define (cell-update! cell)
-  (when (not (cell-paused cell))
-					;(display "Updated")
-					;(display (cell-fn cell))
-					;(newline)
-    ((cell-fn cell))))
-
-
-
-(define (create-cell* fn args #!key (paused #f))
-  (letrec* ([ins (filter cell? args)]
-
-	    [update-fn (lambda ()
-			 (let ([arg-vals (map (lambda (x) (if (cell? x) (cell-get x) x)) args)])
-			   (if (any (cut eq? 'uninitialized-cell <>) arg-vals)
-			       (print "Skipping update of cell with unitialized inputs")
-			       (box-set! (cell-box cell)
-					 (if (eq? args '())
-					     fn
-					     (apply fn arg-vals))))))]
-	    [cell (make-cell (make-box 'uninitialized-cell) update-fn ins (list) paused)])
-    (cell-update! cell)
-
-    (for-each (lambda (in)
-		(cell-outs-set! in (cons cell (cell-outs in ))))
-	      ins)
-
-    cell))
-
-(define (create-cell fn #!rest args)
-  (create-cell* fn args paused: #f))
-
-(define (create-paused-cell fn . args)
-  (create-cell* fn args paused: #t))
-
-(define (cell-unpause cell)
-  (cell-paused-set! cell #f)
-  (cell-update! cell))
-
-(define (recompute-dependents cell)
-  (for-each (lambda (out)
-	      ((cell-fn out))
-	      (recompute-dependents out))
-	    (cell-outs cell)))
-
-(define (cell-set! cell val)
-  ;; TODO update
-  (box-set! (cell-box cell) val)
-  (recompute-dependents cell)
-  cell)
-
-(define (file-cell file)
-  (define fcell (create-cell file))
-  (define (tsleep n)
-    (thread-sleep! (seconds->time (+ n (time->seconds (current-time))))))
-  (define (get-time)
-    (file-modification-time file))
-  ;; TODO use single thread to watch all files
-  (thread-start!
-   (lambda ()
-     (let loop ((filetime '()))
-       (let ((newtime (get-time)))
-	 (when (not (equal? filetime newtime))
-	   (handle-exceptions e (lambda (e) (display e))
-	     (display "Updated: ") (display file) (newline)
-	     (cell-set! fcell file)))
-	 (tsleep 1)
-	 (loop newtime)))))
-  fcell)
 
 (define (circle-ring n)
   (let ([b (list->ringbuffer
@@ -221,5 +157,5 @@
 
 (define (repeatedly n f)
   (if (positive? n)
-    (cons (f) (repeatedly (- n 1) f))
-    '()))
+      (cons (f) (repeatedly (- n 1) f))
+      '()))

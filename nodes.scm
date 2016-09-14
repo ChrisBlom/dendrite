@@ -21,12 +21,6 @@
 (define (conj list elem)
   (cons elem list))
 
-(define-syntax update!
-  (syntax-rules ()
-    [(_ v f x ...)
-     (begin (set! v (f v x ...))
-	    v)]))
-
 (define (new-node render-fn #!optional (body #f) (shape #f) (id #f))
   (let ([n (make-node render-fn
 		      '()
