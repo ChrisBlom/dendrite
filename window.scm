@@ -79,13 +79,15 @@
 	 (body (cp:body-new  mass moment))
 	 (shape (cp:circle-shape-new body radius cp:v0)))
 
-    (cp:body-set-position body (cp:v (exact->inexact x) (exact->inexact y)))
+    (set! (cp:body-position body) (cp:v (exact->inexact x) (exact->inexact y)))
+
     (when velocity
-      (cp:body-set-velocity body velocity))
+      (set! (cp:body-velocity body) velocity))
     (cp:space-add-body space body)
 
-    (cp:shape-set-friction shape friction)
-    (cp:shape-set-elasticity shape elasticity)
+    (set! (cp:shape-friction shape) friction)
+    (set! (cp:shape-elasticity shape) elasticity)
+
     (cp:space-add-shape space shape)
 
     (new-node (render-ball idx) body shape)))
