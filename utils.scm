@@ -7,6 +7,14 @@
     [(comment expr ...)
      #f]))
 
+(define-syntax set!!
+  (syntax-rules ()
+    [(set!! var expr)
+     (set! var expr)]
+    [(set!! var expr more ...)
+     (begin (set! var expr)
+	    (set!! more ...))]))
+
 (define-syntax update!
   (ir-macro-transformer
    (lambda (e r c)
