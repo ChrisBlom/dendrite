@@ -7,6 +7,11 @@
     [(comment expr ...)
      #f]))
 
+(define-syntax section
+  (syntax-rules ()
+    [(section expr ...)
+     (begin expr ...)]))
+
 (define-syntax set!!
   (syntax-rules ()
     [(set!! var expr)

@@ -21,6 +21,14 @@
 (define (conj list elem)
   (cons elem list))
 
+
+;; inserts a new ball at the current cursor
+(define the-counter (box 0))
+
+(define (next-id)
+  (box-swap! the-counter inc))
+
+
 (define (new-node render-fn #!optional (body #f) (shape #f) (id #f))
   (let ([n (make-node render-fn
 		      '()
