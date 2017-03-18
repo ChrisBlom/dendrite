@@ -1,6 +1,7 @@
 
-
+;; (name root-note space)
 (define loaded-scene #f)
+
 (define (unload-scene scene)
   (display "TODO")
   (newline))
@@ -17,3 +18,10 @@
     (set! loaded-scene (init-scene root-node space)))
 
   loaded-scene)
+
+
+(comment
+
+ (load-scene "1")
+
+ )
