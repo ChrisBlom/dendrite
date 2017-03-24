@@ -1,5 +1,8 @@
 (use (prefix chipmunk cp:)
-     ringbuffer)
+     ringbuffer
+     clojurian-syntax
+     srfi-42
+     gl-math)
 
 (define wsz 5.)
 
@@ -15,10 +18,7 @@
 
 (define the-damping 0.5)
 
-(define root root-node)
-(define space the-space)
-
-(define (init-scene root space)
+(define (init-scene scene-node space)
 
   ;; walls
   (cp:space-add-shapes space
@@ -47,11 +47,10 @@
 		(set! (cp:body-position body-center) center-pos)
 		(cp:space-add-body space body-center)
 		(cp:space-add-shape space shape)
-		(let* ([n (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+		(let* ([n (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
 				      ((*render-circle-shape*) projection-matrix view-matrix shape))
 				    body-center
 				    shape)])
-		  (node-children-update! root (cut cons n <>))
 		  n)))))
 
   (define edges-inner
@@ -70,11 +69,10 @@
 		(cp:body-set-position body-center (cp:vmult center-pos 0.5))
 		(cp:space-add-body space body-center)
 		(cp:space-add-shape space shape)
-		(let* ([edge-node (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
+		(let* ([edge-node (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
 					      ((*render-circle-shape*) projection-matrix view-matrix shape))
 					    body-center
 					    shape)])
-		  (node-children-update! root (cut cons edge-node <>))
 
 		  `((body-center . ,body-center)
 		    (shape . ,shape))
@@ -106,12 +104,10 @@
 					       100.
 					       the-damping
 					       )])
-			 (node-children-update! root
-						(cut append <>
-						     (list (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-								       ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
-							   (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-								       ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint))))))
+			 (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
+					  ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+			 (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
+				     ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))
 			 (list constraint rot-constraint))))
 
   ;; inner shell
@@ -139,12 +135,10 @@
 					    100.
 					    the-damping
 					    )])
-		      (node-children-update! root
-					     (cut append <>
-						  (list (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-								    ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
-							(new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-								    ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint))))))
+		      (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
+				       ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+		      (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
+				       ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))
 		      (list constraint rot-constraint))))
 
   (define (outer-for-inner i)
@@ -152,7 +146,7 @@
 	  (* 2 i)))
 
   ;; outer -> inner
-  (apply cp-space-add-constraints space
+  (apply cp:space-add-constraints space
 	 (append-ec (:range i 0 (vector-length edges-inner))
 		    (:list outer (outer-for-inner i))
 		    (let* ([current (vector-ref edges-inner i)]
@@ -176,12 +170,10 @@
 					    100.
 					    the-damping
 					    )])
-		      (node-children-update! root
-					     (cut append <>
-						  (list (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-								    ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
-							(new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-								    ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint))))))
+		      (list (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
+					     ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+			    (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
+					     ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint))))
 		      (list constraint rot-constraint))))
 
   (define rcs
@@ -197,14 +189,11 @@
       (cp:space-add-body space body-center)
       (cp:space-add-shape space shape)
 
-      (node-children-update! root
-			     (cut cons
-			       (let* ([body body-center])
-				 (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					     ((*render-circle-shape*) projection-matrix view-matrix shape))
-					   body
-					   shape))
-			       <>))
+      (let* ([body body-center])
+	(new-node scene-node  (lambda (node projection-matrix view-matrix ctx-matrix)
+			  ((*render-circle-shape*) projection-matrix view-matrix shape))
+		  body
+		  shape))
 
       (append-ec (:range i 0 (vector-length edges-inner))
 		 (let* ([current (vector-ref edges-inner i)]
@@ -228,14 +217,24 @@
 					 100.
 					 the-damping)])
 
-		   (let ([c (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))]
-			 [rc (new-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					 ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))])
-		     (node-children-update! root append
-					    (list c rc)))
+		   (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
+				    ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+		   (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
+				    ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))
+
 		   (list constraint rot-constraint)))))
 
   (apply cp:space-add-constraints space rcs)
 
-  (list 1 root space))
+  ;; filling
+  (let ([n 100])
+    (list-ec (:range i n)
+	     (let ([angle (/ (* pi 2 i 8) n)]
+		   [radius (* 2 (/ i n))])
+	       (add-ball scene-node space
+			 (* radius (sin angle))
+			 (* radius (cos angle))
+			 i
+			 #:radius 0.1))))
+
+  (list "1" scene-node space))

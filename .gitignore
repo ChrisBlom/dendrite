@@ -2,3 +2,4 @@
 /window.c
 *.so
 *.o
+/main

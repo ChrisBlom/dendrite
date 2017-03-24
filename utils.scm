@@ -1,6 +1,13 @@
 (import-for-syntax chicken scheme srfi-1)
 (import chicken scheme matchable)
+
 (use box)
+
+(define-syntax define-once
+  (syntax-rules ()
+    [(define-once name expr ...)
+     (when (unbound? (quote name))
+       (define name expr ...))]))
 
 (define-syntax comment
   (syntax-rules ()
@@ -166,7 +173,7 @@
     (* n (- (* 2 (/ (random sz) sz)) 1))))
 
 (define (without list elem)
-  (remove (cut eq? elem <>) list))
+  (remove (lambda (e) (eq? elem e )) list))
 
 (define (repeatedly n f)
   (if (positive? n)

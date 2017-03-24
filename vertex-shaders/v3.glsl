@@ -12,5 +12,5 @@ void main(){
    float d =   sqrt((position.x * position.x) + (position.y * position.y) );
    float v = 0.5;
    float dd = max( sin(d*2+1)*.5+.5 ,0);
-   c = vec4(v*2,v,v,dd/4);
+   c = vec4(v*30,v,v,dd/4);
 }

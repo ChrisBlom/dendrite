@@ -3,6 +3,7 @@
 (use (prefix glfw3 glfw:)
      (prefix opengl-glew gl:)
      (prefix chipmunk cp:)
+     parley
      gl-math
      gl-utils
      srfi-4 ; vectors
@@ -21,8 +22,8 @@
 
 ;;;;; Utils ;;;;;
 
-(include "utils.scm")
 (include "mesh.scm")
+(include "utils.scm")
 (include "chipmunk-utils.scm")
 (include "reactive.scm")
 (include "pipeline.scm")
@@ -31,7 +32,7 @@
 (include "render.scm")
 
 (when (unbound? 'REPL)
-  (define repl-port 6061)
+  (define repl-port 6062)
   (define REPL (make-prepl repl-port)))
 
 ;;;; Globals
@@ -41,42 +42,14 @@
 (define the-mouse-v (make-parameter (cp:v 0 0)))
 (define the-mouse-ball (make-parameter #f))
 
-(define root-node (new-node (lambda (x v p c) #f)
+(define -run-physics- (make-parameter #t))
+
+(define root-node (new-node #f (lambda (x v p c) #f)
 			   #f #f))
-
-(comment
- ;; reset root node
- (node-children-set! root-node '()))
-
-;;;; Rendering
-
-(comment
-
- (define the-space (cp:space-new))
-
- (define ff (cp:shape-filter-new (cp:uint 1) cp:all-categories cp:all-categories))
-
- (define out (allocate 1))
-
- (define p (cp:space-point-query-nearest the-space (cp:v 0. 0.1) 4 ff out))
-
- (filter
-  (lambda (x) (eq? (node-shape x) p))
-  (map print (map node-shape all-nodes)))
-
- (filter
-  (o (cut equal? p <>) node-shape)
-  (node-descendants root-node))
-
- (filter
-  (cut equal? p <>)
-  (cp:space-shapes the-space))
-
-)
 
 ;;;; Scene Setup
 
-(define (add-ball space x y idx #!key (elasticity 0.95) (friction 0.2) (mass 1.) (radius 0.1) (velocity #f))
+(define (add-ball parent-node space x y idx #!key (elasticity 0.95) (friction 0.2) (mass 1.) (radius 0.1) (velocity #f))
   (let* ((moment (cp:moment-for-circle mass 0. radius cp:v0))
 	 (body (cp:body-new  mass moment))
 	 (shape (cp:circle-shape-new body radius cp:v0)))
@@ -93,41 +66,35 @@
 
     (cp:space-add-shape space shape)
 
-    (new-node (render-ball idx) body shape)))
+    (new-node parent-node (render-ball idx) body shape)))
 
 ;;;; Physics
 
 (define (init-physics)
-  (let* ([scene (load-scene "1")]
-	 [node (second scene)]
-	 [space (third scene)])
-    (the-mouse-ball (add-ball space 10. 10. 0 #:radius 0.2 #:friction 0.01))
-    (node-children-update! node append
-			   (list (the-mouse-ball)))
-    (set! the-space space)
-    (set! root-node node)))
+  (let* ([scene (load-scene "1")])
+    (the-mouse-ball (add-ball root-node the-space 10. 10. 0 #:radius 0.2 #:friction 0.01)))
+  ;; add ball attached to cursor
+  (list (the-mouse-ball)))
 
 (init-physics)
 
-;; add ball attached to cursor
-(node-children-update! root-node append
-		       (list (the-mouse-ball))
-		       (let ([n 100])
-			 (list-ec (:range i n)
-				  (let ([angle (/ (* pi 2 i 8) n)]
-					[radius (* 2 (/ i n))])
-				    (add-ball the-space
-					      (* radius (sin angle))
-					      (* radius (cos angle))
-					      i
-					      #:radius 0.1)))))
+(comment
+
+ (load-scene "2")
+
+ (first loaded-scene)
+
+ (unload)
+
+; (add-ball (cadr loaded-scene) the-space 10. 10. 0 #:radius 0.2 #:friction 0.01)
+
+ )
 
 (define (add-node-at-pos)
   (let ([m (cp:body-get-position (node-body (the-mouse-ball)))])
-    (node-children-update! root-node append
-			   (list (add-ball the-space (cp:v.x m) (cp:v.y m) (next-id)
-					   #:radius 0.2
-					   #:velocity (v-rand 10))))
+    (add-ball root-node the-space (cp:v.x m) (cp:v.y m) (next-id)
+	      #:radius 0.2
+	      #:velocity (v-rand 10))
     m))
 
 ;;;; Graphics
@@ -162,32 +129,6 @@
 
 ;;;  Meshes
 
-(define circle-mesh (disk 20))
-
-(define rectangle-mesh rect)
-
-(define (render-mesh mesh program mvp energy color)
-  (gl:use-program program)
-  (gl:bind-vertex-array 0)
-
-  ;; set shader parameters
-  (let ([id (gl:get-uniform-location program "ENERGY")])
-    (when (> id -1)
-      (gl:uniform1f id energy)))
-
-  ;; set MVP matrix
-  (gl:uniform-matrix4fv (gl:get-uniform-location program "MVP") 1 #f mvp)
-
-  (gl:uniform3fv (gl:get-uniform-location program "colormod") 1
-		 (list->f32vector (vector->list color)))
-  ;; render mesh
-  (let ([vao (mesh-vao mesh)])
-    (when vao
-      (gl:bind-vertex-array vao)
-      (gl:draw-elements-base-vertex (mode->gl (mesh-mode mesh))
-				    (mesh-n-indices mesh)
-				    (type->gl (mesh-index-type mesh))
-				    #f 0))))
 
 ;;; Window setup
 
@@ -248,7 +189,8 @@
 	   (REPL)
 
 	   ;; advance physics
-	   (cp:space-step the-space 1/30)
+	   (when (-run-physics-)
+	     (cp:space-step the-space 1/30))
 
 	   ;; set mouse position
 	   (set! (cp:body-position (node-body (the-mouse-ball))) (the-mouse-v))
@@ -297,3 +239,30 @@
      (current-input-port (make-parley-port old)))
 
 (repl)
+
+
+
+(comment
+
+ (define ff (cp:shape-filter-new (cp:uint 1) cp:all-categories cp:all-categories))
+
+ (define out (allocate 1))
+
+ (define p (cp:space-point-query-nearest the-space (cp:v 0. 0.1) 4 ff out))
+
+ (filter
+  (lambda (x) (eq? (node-shape x) p))
+  (map print (map node-shape all-nodes)))
+
+ (filter
+  (o (cut equal? p <>) node-shape)
+  (node-descendants root-node))
+
+ (filter
+  (cut equal? p <>)
+  (cp:space-shapes the-space))
+
+)
+(comment
+ ;; reset root node
+ (node-children-set! root-node '()))

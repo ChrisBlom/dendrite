@@ -1,6 +1,8 @@
+(use srfi-1)
 
 (define-record node
   render-fn ;; takes node , mvp
+  parent ;; node, #f for root
   children ;; list of nodes
   matrix
   body				;; optional
@@ -10,6 +12,10 @@
   outputs ;; list of links
   )
 
+(define-record-printer (node x out)
+  (fprintf out "#,(node ~S ~S)"
+           (node-id x)
+	   (map node-id (node-children x))))
 
 (define-record link
   (setter source)				;; node
@@ -28,9 +34,9 @@
 (define (next-id)
   (box-swap! the-counter inc))
 
-
-(define (new-node render-fn #!optional (body #f) (shape #f) (id #f))
+(define (new-node parent-node render-fn #!optional (body #f) (shape #f) (id #f))
   (let ([n (make-node render-fn
+		      parent-node
 		      '()
 		      (mat4-identity)
 		      body
@@ -40,6 +46,9 @@
 		      '()
 		      )])
     (update! all-nodes conj n)
+    (when parent-node
+      (node-children-set! parent-node
+			  (cons n (node-children parent-node))))
     n))
 
 (define (node-children-update! node f . args)
@@ -57,15 +66,36 @@
 	   (map node-descendants children))))
 
 (define (remove-node parent node)
-;  (for-each (cut remove-node node <>) (node-children node))
-  (node-children-update! parent without node)
-  (when (node-body node) (cp:space-remove-body the-space (node-body p)))
-  (when (node-shape node)  (cp:space-remove-shape the-space (node-shape p))))
+;  (node-children-update! parent (cut delete node <> eq?))
+ ; (when (node-body node) (cp:space-remove-body the-space (node-body parent)))
+  (when (node-shape node)  (cp:space-remove-shape the-space (node-shape parent))))
 
 (define (link-add src trg n)
-
   (let ([buffer (new-ringbuffer n)]
 	[link (make-link src trg buffer)])
     (update! (node-outputs src) (conj link))
     (update! (node-inputs trg) (conj link))
     link))
+
+(define a '())
+
+(define (remove-subtree parent node)
+
+  (set! a (cons node a))
+
+  (for-each (lambda (child)
+	      (remove-subtree node child))
+	    (node-children node))
+
+  (when (and (node-shape node) (cp:space-contains-shape the-space (node-shape node)))
+    (cp:space-remove-shape the-space (node-shape node)))
+
+  (when (and (node-body node) (cp:space-contains-body the-space (node-body node)))
+    (cp:space-remove-body the-space (node-body node)))
+
+  ;; remove from parent
+  (when parent
+    (node-children-set! parent (delete node (node-children parent) equal?)))
+
+
+  )

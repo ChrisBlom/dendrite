@@ -145,11 +145,18 @@
 		    initial-elements: (0 1))
    mode: #:lines))
 
+(define the-line-mesh (line-mesh '(0 0) '(0 0)))
 
 (define (line-mesh-vertices x1 y1 x2 y3)
   `((position . ,(list x1 y1 x2 y3))
     (color . (255 255 0
            	  0   255 0))))
 
+;; (define (repeat n x)
+;;   (if (zero? n)
+;;       '()
+;;       (cons x (repeat (- n 1) x))))
 
-(define the-line-mesh (line-mesh '(0 0) '(0 0)))
+;; (define (vects->poly-mesh-vertices . vects)
+;;   `((position . ,(append-map f64vector->list vects))
+;;     (color . ,(apply append (repeat (length vects) (list 255 255 255))))))
