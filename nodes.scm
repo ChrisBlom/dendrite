@@ -1,4 +1,4 @@
-(use srfi-1)
+(use srfi-1 gl-math   gl-utils)
 
 (define-record node
   render-fn ;; takes node , mvp
@@ -10,6 +10,7 @@
   id
   inputs ;; list of links
   outputs ;; list of links
+  color
   )
 
 (define-record-printer (node x out)
@@ -32,10 +33,15 @@
 (define the-counter (box 0))
 
 (define (next-id)
-  (box-swap! the-counter inc))
+  (box-swap! the-counter (cut + <> 1)))
 
-(define (new-node parent-node render-fn #!optional (body #f) (shape #f) (id #f))
-  (let ([n (make-node render-fn
+(define (new-node parent-node #!key
+		  (render #f)
+		  (body #f)
+		  (shape #f)
+		  (id #f)
+		  (color #f))
+  (let ([n (make-node render
 		      parent-node
 		      '()
 		      (mat4-identity)
@@ -44,7 +50,7 @@
 		      (or id (next-id))
 		      '()
 		      '()
-		      )])
+		      color)])
     (update! all-nodes conj n)
     (when parent-node
       (node-children-set! parent-node
@@ -99,3 +105,8 @@
 
 
   )
+
+(define (remove-children node)
+  (for-each (lambda (child)
+	      (remove-subtree node child))
+	    (node-children node)))

@@ -1,4 +1,20 @@
 
+
+(define (render-node node projection view ctx-matrix)
+  (let ([render-fn (node-render-fn node)])
+    ;; Render node
+    (when render-fn
+      (render-fn node
+		 projection
+		 (m* ctx-matrix view)
+		 ctx-matrix))
+    ;; render children with sub-ctx
+    (let ([sub-ctx (m* (node-matrix node) ctx-matrix)])
+      (for-each (lambda (child)
+		  (render-node child projection view sub-ctx))
+		(node-children node)))))
+
+
 (define circle-mesh (disk 20))
 
 (define rectangle-mesh rect)
@@ -26,21 +42,6 @@
 				    (type->gl (mesh-index-type mesh))
 				    #f 0))))
 
-
-(define (render-node node projection view ctx-matrix)
-  (let ([render-fn (node-render-fn node)])
-    ;; Render node
-    (when render-fn
-      (render-fn node
-		 projection
-		 (m* ctx-matrix view)
-		 ctx-matrix))
-    ;; render children with sub-ctx
-    (let ([sub-ctx (m* (node-matrix node) ctx-matrix)])
-      (for-each (lambda (child)
-		  (render-node child projection view sub-ctx))
-		(node-children node)))))
-
 (define ((render-ball idx) node projection-matrix view-matrix ctx-matrix)
   (let* ([body  (node-body node)]
 	 [angle (- (cp:body-angle body))]
@@ -55,10 +56,11 @@
 		 (cell-get program1)
 		 mvp
 		 (cp:vlength (cp:body-velocity body))
-		 (vector
-		  1
-		  (+ 0.5 (* 0.5 (sin idx)))
-		  (+ 0.5 (* 0.5 (cos idx)))))))
+		 (or (node-color node)
+		     (vector
+		      1
+		      (+ 0.5 (* 0.5 (sin idx)))
+		      (+ 0.5 (* 0.5 (cos idx))))))))
 
 
 
@@ -82,6 +84,29 @@
 					(cp:vlength (cp:body-get-velocity body))
 
 					(vector 1 1 0)))))
+
+
+(define *render-circle-node* (make-parameter #f))
+
+(*render-circle-node*
+ (lambda (node projection-matrix view-matrix ctx-matrix)
+   (let* ([body (node-body node)]
+	  [angle (+ (/ pi 4) (- (cp:body-get-angle body)))]
+	  [body-pos (cp:body-get-position body)]
+	  [trans (make-point (cp:v.x body-pos)
+			     (cp:v.y body-pos)
+			     0)])
+
+     (render-mesh circle-mesh
+		  (cell-get program3)
+		  (m* projection-matrix
+		      (m* (translation trans)
+			  (m* view-matrix
+			      (rotate-z angle (model-matrix)))))
+
+		  (cp:vlength (cp:body-get-velocity body))
+
+z		  (or (node-color node) (vector 1 1 0))))))
 
 (define *render-constraint* (make-parameter #f))
 

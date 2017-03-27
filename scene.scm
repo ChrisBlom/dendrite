@@ -20,16 +20,14 @@
   (load-relative (string-append "scenes/" n ".scm"))
 
   (-run-physics- #f)
+
   (unload)
 
   (let ([space (cp:space-new)]
-	[scene-node (new-node #f (lambda (x v p c) #f))])
+	[scene-node (new-node root-node)])
 
     (cp:space-set-iterations space 20) ; 10 default, can be overwritten by scene
-
     (set! loaded-scene (init-scene scene-node space))
-
-    (node-children-update! root-node (cut cons scene-node <>))
 
     ;; TODO free old space
     (set! the-space space))

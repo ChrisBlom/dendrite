@@ -12,10 +12,10 @@ uniform vec3 colormod;
 
 void main(){
    gl_Position = MVP * vec4(position, 0.0, 1.0);
-   c = vec4(colormod.r,
-	    colormod.g,
-	    colormod.b,
-	    1);
+   c = vec4(colormod.r*0.4,
+	    colormod.g*0.4,
+	    colormod.b*0.4,
+	    0.1);
 
    p = vec3(position.x, position.y,0);
 }

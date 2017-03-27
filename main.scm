@@ -44,9 +44,9 @@
 
 (define -run-physics- (make-parameter #t))
 
-(define root-node (new-node #f (lambda (x v p c) #f)
-			   #f #f))
+(define root-node (new-node #f))
 
+(define interaction-node (new-node root-node))
 ;;;; Scene Setup
 
 (define (add-ball parent-node space x y idx #!key (elasticity 0.95) (friction 0.2) (mass 1.) (radius 0.1) (velocity #f))
@@ -66,7 +66,12 @@
 
     (cp:space-add-shape space shape)
 
-    (new-node parent-node (render-ball idx) body shape)))
+    (new-node parent-node
+	      #:render (render-ball idx)
+	      #:id idx
+	      #:body body
+	      #:shape shape
+	      #:color (vector 0 1 1))))
 
 ;;;; Physics
 
@@ -92,7 +97,7 @@
 
 (define (add-node-at-pos)
   (let ([m (cp:body-get-position (node-body (the-mouse-ball)))])
-    (add-ball root-node the-space (cp:v.x m) (cp:v.y m) (next-id)
+    (add-ball interaction-node the-space (cp:v.x m) (cp:v.y m) (next-id)
 	      #:radius 0.2
 	      #:velocity (v-rand 10))
     m))

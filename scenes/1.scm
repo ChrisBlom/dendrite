@@ -47,10 +47,12 @@
 		(set! (cp:body-position body-center) center-pos)
 		(cp:space-add-body space body-center)
 		(cp:space-add-shape space shape)
-		(let* ([n (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
-				      ((*render-circle-shape*) projection-matrix view-matrix shape))
-				    body-center
-				    shape)])
+		(let* ([n (new-node  scene-node
+				     #:render (lambda (node projection-matrix view-matrix ctx-matrix)
+						((*render-circle-shape*) projection-matrix view-matrix shape))
+				     #:body body-center
+				     #:shape shape
+				     #:color (vector 1 0 0))])
 		  n)))))
 
   (define edges-inner
@@ -62,17 +64,19 @@
 		     [end-pos (cp:v (car end) (cdr end))]
 		     [center-pos (cp:vlerp start-pos end-pos 0.5)]
 		     [mass 0.3]
-		     [radius 0.15]
+		     [radius 0.2]
 		     [body-center (cp:body-new (cp:moment-for-segment mass start-pos end-pos radius) mass)]
 		     [shape (cp:circle-shape-new body-center radius cp:v0)])
 
 		(cp:body-set-position body-center (cp:vmult center-pos 0.5))
 		(cp:space-add-body space body-center)
 		(cp:space-add-shape space shape)
-		(let* ([edge-node (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					      ((*render-circle-shape*) projection-matrix view-matrix shape))
-					    body-center
-					    shape)])
+		(let* ([edge-node (new-node scene-node
+					    #:render (lambda (node projection-matrix view-matrix ctx-matrix)
+						       ((*render-circle-shape*) projection-matrix view-matrix shape))
+					    #:body body-center
+					    #:shape shape
+					    #:color (vector 1 1 1))])
 
 		  `((body-center . ,body-center)
 		    (shape . ,shape))
@@ -104,10 +108,13 @@
 					       100.
 					       the-damping
 					       )])
-			 (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					  ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
-			 (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
-				     ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))
+			 (new-node scene-node
+				   #:render
+				   (lambda (node projection-matrix view-matrix ctx-matrix)
+				     ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+			 (new-node scene-node
+				   #:render (lambda (node projection-matrix view-matrix ctx-matrix)
+					      ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))
 			 (list constraint rot-constraint))))
 
   ;; inner shell
@@ -135,10 +142,10 @@
 					    100.
 					    the-damping
 					    )])
-		      (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
-				       ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
-		      (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
-				       ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))
+		      (new-node scene-node #:render (lambda (node projection-matrix view-matrix ctx-matrix)
+						      ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+		      (new-node scene-node #:render (lambda (node projection-matrix view-matrix ctx-matrix)
+						      ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))
 		      (list constraint rot-constraint))))
 
   (define (outer-for-inner i)
@@ -170,10 +177,12 @@
 					    100.
 					    the-damping
 					    )])
-		      (list (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					     ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
-			    (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
-					     ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint))))
+		      (list (new-node scene-node
+				      #:render (lambda (node projection-matrix view-matrix ctx-matrix)
+						 ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+			    (new-node scene-node
+				      #:render (lambda (node projection-matrix view-matrix ctx-matrix)
+						 ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint))))
 		      (list constraint rot-constraint))))
 
   (define rcs
@@ -190,10 +199,11 @@
       (cp:space-add-shape space shape)
 
       (let* ([body body-center])
-	(new-node scene-node  (lambda (node projection-matrix view-matrix ctx-matrix)
-			  ((*render-circle-shape*) projection-matrix view-matrix shape))
-		  body
-		  shape))
+	(new-node scene-node
+		  #:render (lambda (node projection-matrix view-matrix ctx-matrix)
+			     ((*render-circle-shape*) projection-matrix view-matrix shape))
+		  #:body  body
+		  #:shape shape))
 
       (append-ec (:range i 0 (vector-length edges-inner))
 		 (let* ([current (vector-ref edges-inner i)]
@@ -217,10 +227,12 @@
 					 100.
 					 the-damping)])
 
-		   (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
-				    ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
-		   (new-node scene-node (lambda (node projection-matrix view-matrix ctx-matrix)
-				    ((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))
+		   (new-node scene-node
+			     #:render (lambda (node projection-matrix view-matrix ctx-matrix)
+					((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
+		   (new-node scene-node
+			     #:render (lambda (node projection-matrix view-matrix ctx-matrix)
+					((*render-constraint*) projection-matrix view-matrix ctx-matrix rot-constraint)))
 
 		   (list constraint rot-constraint)))))
 
