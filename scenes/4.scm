@@ -103,23 +103,8 @@
 			      [before (vector-ref edges-outer (% (+ i offset) (vector-length edges-outer)))]
 			      [body-current (node-body current)]
 			      [body-before (node-body before)]
-			      [constraint (cp:damped-spring-new
-					   body-before
-					   body-current
-					   cp:v0
-					   cp:v0
-					   (cp:vlength (cp:v- (cp:body-position body-before)
-							      (cp:body-position body-current)))
-					   stiffness
-					   the-damping)]
-			      [rot-constraint (cp:damped-rotary-spring-new
-					       body-before
-					       body-current
-					       (cp:vtoangle (cp:v- (cp:body-position body-before)
-								   (cp:body-position body-current)))
-					       stiffness
-					       the-damping
-					       )])
+			      [constraint (make-slide-joint body-before body-current)]
+			      [rot-constraint (make-slide-joint body-before body-current)])
 			 (new-node scene-node
 				   #:render
 				   (lambda (node projection-matrix view-matrix ctx-matrix)
@@ -137,23 +122,8 @@
 			   [before (vector-ref edges-inner (% (+ i offset) (vector-length edges-inner)))]
 			   [body-current (node-body current)]
 			   [body-before (node-body before)]
-			   [constraint (cp:damped-spring-new
-					body-before
-					body-current
-					cp:v0
-					cp:v0
-					(cp:vlength (cp:v- (cp:body-position body-before)
-							   (cp:body-position body-current)))
-					stiffness
-					the-damping)]
-			   [rot-constraint (cp:damped-rotary-spring-new
-					    body-before
-					    body-current
-					    (cp:vtoangle (cp:v- (cp:body-position body-before)
-								(cp:body-position body-current)))
-					    stiffness
-					    the-damping
-					    )])
+			   [constraint (make-slide-joint body-before body-current)]
+			   [rot-constraint (make-slide-joint body-before body-current)])
 		      (new-node scene-node #:render (lambda (node projection-matrix view-matrix ctx-matrix)
 						      ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))
 		      (new-node scene-node #:render (lambda (node projection-matrix view-matrix ctx-matrix)
@@ -181,14 +151,9 @@
 							   (cp:body-position body-current)))
 					stiffness
 					the-damping)]
-			   [rot-constraint (cp:damped-rotary-spring-new
+			   [rot-constraint (make-slide-joint
 					    body-before
-					    body-current
-					    (cp:vtoangle (cp:v- (cp:body-position body-before)
-								(cp:body-position body-current)))
-					    stiffness
-					    the-damping
-					    )])
+					    body-current)])
 		      (list (new-node scene-node
 				      #:render (lambda (node projection-matrix view-matrix ctx-matrix)
 						 ((*render-constraint*) projection-matrix view-matrix ctx-matrix constraint)))

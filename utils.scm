@@ -39,6 +39,27 @@
 	       (last field)
 	       field))))))
 
+(define-syntax condp
+  (er-macro-transformer
+   (lambda (e r c)
+     (let ([pred    (cadr e)]
+	   [k       (caddr e)]
+	   [clauses (cdddr e)]
+	   [kk (gensym 'k)])
+       `(let ([,kk ,k])
+	    (cond
+	     ,@(map (lambda (clause)
+		      `((,pred ,kk ,(car clause))
+			(begin ,@(cdr clause))))
+		    clauses)))))))
+
+(comment
+ (expand '(condp equal? (- 3 1) (1  'b) ((+ 1 1) 'b)))
+
+ (condp equal? (- 3 1) (1  'b) ((+ 1 1) 'b)))
+
+
+
 (define-syntax update-slot!
   (syntax-rules ()
     ((update-slot! rec slot f args ...)

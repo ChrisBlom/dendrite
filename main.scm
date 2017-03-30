@@ -7,9 +7,8 @@
      gl-math
      gl-utils
      srfi-4 ; vectors
-     srfi-18 ; threads
+     srfi-18 ; green threads
      srfi-42 ; eager comprehension
-     box ; mutable box
      nrepl
      clojurian-syntax
      prepl
@@ -38,7 +37,6 @@
 ;;;; Globals
 
 (define the-space #f)
-(define the-nodes (box (list)))
 (define the-mouse-v (make-parameter (cp:v 0 0)))
 (define the-mouse-ball (make-parameter #f))
 
@@ -49,7 +47,14 @@
 (define interaction-node (new-node root-node))
 ;;;; Scene Setup
 
-(define (add-ball parent-node space x y idx #!key (elasticity 0.95) (friction 0.2) (mass 1.) (radius 0.1) (velocity #f))
+(define (add-ball parent-node space x y idx
+		  #!key
+		  (elasticity 0.95)
+		  (friction 0.2)
+		  (mass 1.)
+		  (radius 0.1)
+		  (velocity #f)
+		  (color (vector 0 1 1)))
   (let* ((moment (cp:moment-for-circle mass 0. radius cp:v0))
 	 (body (cp:body-new  mass moment))
 	 (shape (cp:circle-shape-new body radius cp:v0)))
@@ -71,15 +76,12 @@
 	      #:id idx
 	      #:body body
 	      #:shape shape
-	      #:color (vector 0 1 1))))
+	      #:color color)))
 
 ;;;; Physics
 
 (define (init-physics)
-  (let* ([scene (load-scene "1")])
-    (the-mouse-ball (add-ball root-node the-space 10. 10. 0 #:radius 0.2 #:friction 0.01)))
-  ;; add ball attached to cursor
-  (list (the-mouse-ball)))
+  (load-scene "1"))
 
 (init-physics)
 
@@ -96,7 +98,7 @@
  )
 
 (define (add-node-at-pos)
-  (let ([m (cp:body-get-position (node-body (the-mouse-ball)))])
+  (let ([m (the-mouse-v)])
     (add-ball interaction-node the-space (cp:v.x m) (cp:v.y m) (next-id)
 	      #:radius 0.2
 	      #:velocity (v-rand 10))
@@ -106,18 +108,13 @@
 
 ;;; Camera
 
-(define camera-position (box (make-point 0. 0. 0.)))
+;(define projection-matrix (make-parameter (perspective 600 600 1 10 70)))
 
-(define camera-zoom (box 1))
-
-;;(define projection-matrix (make-parameter (perspective 600 600 1 10 70)))
-(define projection-matrix (make-parameter (ortho 10 10  0.1 100)))
-
-(projection-matrix (ortho 10 10  0.1 100))
+(define projection-matrix (make-parameter (ortho 10 10  0.2 100)))
 
 (define the-eye-point (make-parameter (make-point 0 0 5)))
 
-(the-eye-point (make-point 0 0 5))
+(the-eye-point (make-point 0 0 1))
 
 (define the-object-point (make-parameter (make-point 0 0 0)))
 
@@ -128,6 +125,10 @@
 			   (the-object-point)
 			   (make-point 0 1 0)))) ; up vector
 
+(view-matrix
+ (look-at (make-point 0 0 10)
+	  (make-point 0 0 0)
+	  (make-point 0 1 0)))
 
 (define (model-matrix)
   (mat4-identity))
@@ -197,9 +198,6 @@
 	   (when (-run-physics-)
 	     (cp:space-step the-space 1/30))
 
-	   ;; set mouse position
-	   (set! (cp:body-position (node-body (the-mouse-ball))) (the-mouse-v))
-
 	   ;; draw all nodes
 	   (glfw:swap-buffers (glfw:window))
 	   (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
@@ -247,17 +245,28 @@
 
 
 
+
+
 (comment
+
+ (remove-node (the-mouse-ball))
+
 
  (define ff (cp:shape-filter-new (cp:uint 1) cp:all-categories cp:all-categories))
 
- (define out (allocate 1))
+ (let ([p (cp:space-point-query-nearest the-space (the-mouse-v) 4 ff #f)])
 
- (define p (cp:space-point-query-nearest the-space (cp:v 0. 0.1) 4 ff out))
+   (node-color-set! (first (filter
+			    (lambda (x) (equal? (node-shape x) p))
+			    all-nodes))
+		    (vector 1 1 1))
 
- (filter
-  (lambda (x) (eq? (node-shape x) p))
-  (map print (map node-shape all-nodes)))
+   (first (filter
+	   (lambda (x) (equal? (node-shape x) p))
+	   all-nodes)))
+
+ (node-color
+  (first (filter (lambda (x) (equal? (node-shape x) p)) all-nodes)))
 
  (filter
   (o (cut equal? p <>) node-shape)

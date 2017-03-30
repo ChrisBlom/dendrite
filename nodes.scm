@@ -71,10 +71,10 @@
 	   children
 	   (map node-descendants children))))
 
-(define (remove-node parent node)
-;  (node-children-update! parent (cut delete node <> eq?))
- ; (when (node-body node) (cp:space-remove-body the-space (node-body parent)))
-  (when (node-shape node)  (cp:space-remove-shape the-space (node-shape parent))))
+(define (remove-node node)
+  (when (node-parent node)
+    (remove-subtree (node-parent node)
+		    node)))
 
 (define (link-add src trg n)
   (let ([buffer (new-ringbuffer n)]

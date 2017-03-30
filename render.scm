@@ -62,11 +62,11 @@
 		      (+ 0.5 (* 0.5 (sin idx)))
 		      (+ 0.5 (* 0.5 (cos idx))))))))
 
-
+;; TODO pass node to all render fns
 
 (define *render-circle-shape* (make-parameter #f))
 
-(*render-circle-shape* (lambda (projection-matrix view-matrix segment )
+(*render-circle-shape* (lambda (node projection-matrix view-matrix segment )
 			 (let* ([body (cp:shape-get-body segment)]
 				[angle (+ (/ pi 4) (- (cp:body-get-angle body)))]
 				[body-pos (cp:body-get-position body)]
@@ -83,7 +83,7 @@
 
 					(cp:vlength (cp:body-get-velocity body))
 
-					(vector 1 1 0)))))
+					(or (node-color node) (vector 1 1 0))))))
 
 
 (define *render-circle-node* (make-parameter #f))

@@ -15,6 +15,17 @@
    stiffness
    damping))
 
+(define (make-slide-joint from to #!key (margin 0.2))
+  (let* [(s (cp:vlength (cp:v- (cp:body-position from)
+			       (cp:body-position to))))
+	(spring (cp:slide-joint-new from
+				    to
+				    cp:v0
+				    cp:v0
+				    (* (- 1 margin) s)
+				    (* (+ 1 margin) s)))]
+    spring))
+
 (define (constraint-type x)
   (cond
    [(eq? #\x1 (cp-constraint-is-damped-rotary-spring  x)) 'damped-rotary-spring]
@@ -57,13 +68,6 @@
 
 (define (v-rand n)
   (f64vector (rand n) (rand n)))
-
-(define constraints '())
-
-;; remove, get constrains from space
-(define (add-constraint x)
-  (set! constraints (cons x constraints))
-  x)
 
 (define (update-stiffness delta)
   (map
