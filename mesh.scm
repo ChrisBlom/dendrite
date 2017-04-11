@@ -132,31 +132,43 @@
                          initial-elements: (0 1 2
 					      0 2 3))))
 
-(use matchable)
-
 (define (line-mesh start end)
   (make-mesh
    vertices: `(attributes: ((position #:float 2)
 			    (color #:float 3 normalized: #t))
 	       initial-elements: ((position . ,(append start end))
-					      (color . (255 255 0
-						        0   255 0))))
+				  (color . (255 255 0
+						0   255 0))))
    indices: '(type: #:ushort
 		    initial-elements: (0 1))
    mode: #:lines))
 
 (define the-line-mesh (line-mesh '(0 0) '(0 0)))
 
-(define (line-mesh-vertices x1 y1 x2 y3)
-  `((position . ,(list x1 y1 x2 y3))
+(define (line-mesh-vertices x1 y1 x2 y2)
+  `((position . ,(list x1 y1 x2 y2))
     (color . (255 255 0
            	  0   255 0))))
 
-;; (define (repeat n x)
-;;   (if (zero? n)
-;;       '()
-;;       (cons x (repeat (- n 1) x))))
+(define (vects->poly-mesh-elements vects)
+  (print (list 'vects->poly-mesh-elements vects) (list 'length (length vects))
+	 (repeat-list (length vects) (list 255 255 255)))
+  (let ([colors (apply append (repeat-list 4 (list 255 255 255)))])
+    `((position . ,(append-map f64vector->list vects))
+      (color . ,colors))))
 
-;; (define (vects->poly-mesh-vertices . vects)
-;;   `((position . ,(append-map f64vector->list vects))
-;;     (color . ,(apply append (repeat (length vects) (list 255 255 255))))))
+(define (poly-mesh vertices)
+  (make-mesh
+   vertices: `(attributes: ((position #:float 2)
+			    (color #:float 3 normalized: #t))
+			   initial-elements: ,(vects->poly-mesh-elements vertices))
+   indices: '(type: #:ushort
+		    initial-elements: (0 1 3
+				       1 3 2))
+   mode: #:triangles))
+
+(define the-poly-mesh
+  (poly-mesh (list (cp:v -1 1)
+		   (cp:v 1 1)
+		   (cp:v 1 -1)
+		   (cp:v -1 -1))))

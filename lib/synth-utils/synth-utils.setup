@@ -1,0 +1,11 @@
+;; -*- scheme -*-
+(compile -s
+         synth-utils.scm
+         ;; build .import module
+         -J
+	 -vvvv)
+
+(compile -s synth-utils.import.scm)
+
+(install-extension 'synth-utils
+                   '("synth-utils.so" "synth-utils.import.so"))

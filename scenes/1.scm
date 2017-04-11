@@ -262,8 +262,3 @@
 			 #:radius 0.1))))
 
   (list "1" scene-node space))
-
-(comment
-
-; (cp:space-constraints space)
- )

@@ -152,7 +152,9 @@
 (define (emit-mouse-event pair)
   (set! prev-event cur-event)
   (set! cur-event pair)
-  (drag?))
+  (drag?)
+;  (click?)
+  )
 
 (mouse-button-handler
  (lambda (window button action mods)

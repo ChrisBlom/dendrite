@@ -1,5 +1,4 @@
 
-
 (define (render-node node projection view ctx-matrix)
   (let ([render-fn (node-render-fn node)])
     ;; Render node
@@ -14,6 +13,14 @@
 		  (render-node child projection view sub-ctx))
 		(node-children node)))))
 
+(define (init-node node)
+  (let ([init-fn (node-render-init-fn node)])
+    ;; Render node
+    (when init-fn
+      (init-fn node))
+    (for-each (lambda (child)
+		(init-node child))
+	      (node-children node))))
 
 (define circle-mesh (disk 20))
 
@@ -106,7 +113,7 @@
 
 		  (cp:vlength (cp:body-get-velocity body))
 
-z		  (or (node-color node) (vector 1 1 0))))))
+		  (or (node-color node) (vector 1 1 0))))))
 
 (define *render-constraint* (make-parameter #f))
 
@@ -128,23 +135,27 @@ z		  (or (node-color node) (vector 1 1 0))))))
 				      (vector 1 0 1)))))
 
 
-;; (define *render-poly* (make-parameter #f))
 
-;; (*render-poly* (lambda (projection-matrix view-matrix ctx-matrix segment-shape)
-;; 		       (let* ([n (cp:poly-shape-count segment-shape)])
+(define *render-poly* (make-parameter #f))
 
+(define (v->point v) (make-point (cp:v.x v) (cp:v.y v) 0))
 
-;; 			 (mesh-update! the-line-mesh
-;; 				       (vects->poly-mesh-vertices
-;; 					(list-ec (: i n)
-;; 						 (poly-shape-get-vert segment-shape i))))
+(*render-poly* (lambda (node projection-matrix view-matrix ctx-matrix)
+		 (let* ([poly-shape (node-shape node)]
+			[n (cp:poly-shape-count poly-shape)]
+			[body-pos (cp:body-position (cp:shape-body poly-shape))]
+			[angle (cp:body-angle (cp:shape-body poly-shape))])
 
-;; 			 (render-mesh the-line-mesh
-;; 				      (cell-get program-line)
-;; 				      (m* projection-matrix (m* view-matrix (model-matrix)))
-;; 				      0.5 ; (cp:constraint-get-impulse segment-shape)
-;; 				      (vector 1 0 1)))))
-
+		   (render-mesh (node-mesh node)
+				(cell-get program-poly)
+			      (m* projection-matrix
+				  (m* (translation (make-point (cp:v.x body-pos)
+							       (cp:v.y body-pos)
+							       0))
+				      (m* view-matrix
+					  (rotate-z angle (model-matrix)))))
+		   	      0.5
+		   	      (vector 0.5 3 0.5)))))
 
 (define *render-segment* (make-parameter #f))
 
@@ -160,8 +171,10 @@ z		  (or (node-color node) (vector 1 1 0))))))
 
 			 (render-mesh the-line-mesh
 				      (cell-get program-line)
-				      (m* projection-matrix (m* view-matrix (model-matrix)))
-				      0.5 ; (cp:constraint-get-impulse segment-shape)
+				      (m* projection-matrix
+					  (m* view-matrix
+					      (model-matrix)))
+				      0.5
 				      (vector 1 0 1)))))
 
 (define *render-link* (make-parameter #f))

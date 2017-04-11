@@ -8,24 +8,28 @@
 (define -file-v2-  (file-cell "vertex-shaders/v2.glsl"))
 (define -file-v3-  (file-cell "vertex-shaders/v3.glsl"))
 (define -file-vline-  (file-cell "vertex-shaders/line.glsl"))
+(define -file-vpoly-  (file-cell "vertex-shaders/poly.glsl"))
 
 (define *v1* (create-cell read-all -file-v1-))
 (define *v2* (create-cell read-all -file-v2-))
 (define *v3* (create-cell read-all -file-v3-))
 (define *vline* (create-cell read-all -file-vline-))
 
+(define *vpoly* (create-cell read-all -file-vpoly-))
+
 (define *fragment* (create-cell read-all (file-cell "fragment-shaders/simple.glsl")))
 (define *fragment-constant* (create-cell read-all (file-cell "fragment-shaders/constant.glsl")))
 (define *fragment-line* (create-cell read-all (file-cell "fragment-shaders/line.glsl")))
+(define *fragment-poly* (create-cell read-all (file-cell "fragment-shaders/poly.glsl")))
 
 ;; paused as compile-shader can only be used after gl is initialized
 (define program1     (create-paused-cell compile-shaders! *v1* *fragment*))
 (define program2     (create-paused-cell compile-shaders! *v2* *fragment*))
 (define program3     (create-paused-cell compile-shaders! *v3* *fragment-constant*))
 (define program-line (create-paused-cell compile-shaders! *vline* *fragment-line*))
+(define program-poly (create-paused-cell compile-shaders! *vpoly* *fragment-poly*))
 
-
-(use soil)
+;(use soil)
 
 ;; ;; returns a texture id, requires gl init
 ;; (define (load-texture image-path)
@@ -49,5 +53,6 @@
    (cell-unpause program2)
    (cell-unpause program3)
    (cell-unpause program-line)
+   (cell-unpause program-poly)
 ;   (cell-unpause noise-image-texture)
    )

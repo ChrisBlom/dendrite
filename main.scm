@@ -1,4 +1,6 @@
-(import chicken scheme)
+(import chicken scheme srfi-42 synth-utils)
+
+(import-for-syntax srfi-42 synth-utils)
 
 (use (prefix glfw3 glfw:)
      (prefix opengl-glew gl:)
@@ -8,7 +10,6 @@
      gl-utils
      srfi-4 ; vectors
      srfi-18 ; green threads
-     srfi-42 ; eager comprehension
      nrepl
      clojurian-syntax
      prepl
@@ -19,10 +20,14 @@
      matchable
      extras)
 
+(define (repeat-list n x)
+  (if (positive? n)
+    (cons x (repeat-list (- n 1) x))
+    '()))
+
 ;;;;; Utils ;;;;;
 
 (include "mesh.scm")
-(include "utils.scm")
 (include "chipmunk-utils.scm")
 (include "reactive.scm")
 (include "pipeline.scm")
@@ -33,6 +38,11 @@
 (when (unbound? 'REPL)
   (define repl-port 6062)
   (define REPL (make-prepl repl-port)))
+
+;; (use nrepl)
+;; (when (unbound? 'NREPL)
+;;   (define nrepl-port 6060)
+;;   (define NREPL (thread-start! (lambda () (nrepl nrepl-port)))))
 
 ;;;; Globals
 
@@ -80,22 +90,18 @@
 
 ;;;; Physics
 
-(define (init-physics)
-  (load-scene "1"))
 
-(init-physics)
+;; (comment
 
-(comment
+;;  (load-scene "2")
 
- (load-scene "2")
+;;  (first loaded-scene)
 
- (first loaded-scene)
+;;  (unload)
 
- (unload)
+;; ; (add-ball (cadr loaded-scene) the-space 10. 10. 0 #:radius 0.2 #:friction 0.01)
 
-; (add-ball (cadr loaded-scene) the-space 10. 10. 0 #:radius 0.2 #:friction 0.01)
-
- )
+;;  )
 
 (define (add-node-at-pos)
   (let ([m (the-mouse-v)])
@@ -143,6 +149,9 @@
 (define on-frame (make-parameter #f))
 
 (define (main)
+
+  (glfw:window-hint glfw:+samples+ 4)
+
   (glfw:with-window
    (600 600 "Dendrite"
 	resizable: #f
@@ -152,10 +161,14 @@
 	opengl-profile: glfw:+opengl-core-profile+)
 
    (gl:init)
+   (gl:enable gl:+multisample+)
    (gl:enable gl:+blend+)
    (gl:blend-func gl:+src-alpha+ gl:+one-minus-src-alpha+ )
 
    (start-all-cells)
+
+   (load-scene "poly")
+
 
    ;(gl:bind-texture gl:+texture-2d+ (cell-get noise-image-texture))
  ;  (gl:tex-parameteri gl:+texture-2d+ gl:+texture-min-filter+ gl:+linear+)
@@ -178,6 +191,13 @@
 		     (color . ,(gl:get-attrib-location (cell-get program-line) "color")))
 		   #:stream)
 
+   (mesh-make-vao! the-poly-mesh
+		   `((position . ,(gl:get-attrib-location (cell-get program-line) "position"))
+		     (color . ,(gl:get-attrib-location (cell-get program-line) "color")))
+		   #:stream)
+
+
+
    ;; main loop
    (let loop ([i 0]
 	      [pt (current-milliseconds)])
@@ -188,6 +208,16 @@
        (unless (glfw:window-should-close (glfw:window))
 	 (loop (+ 1 i)
 	       now))))))
+
+(define fps-buffer (new-ringbuffer 100))
+(define fps-sum 0)
+(define (update-fps dt)
+  (ringbuffer-advance fps-buffer )
+  (let ([oldest (ringbuffer-get fps-buffer -1)])
+    (ringbuffer-set! fps-buffer 0 dt)
+    (set! fps-sum (+ fps-sum dt (- oldest)))))
+(define (fps)
+  (/ 1000 fps-sum (- (ringbuffer-length fps-buffer) 1)))
 
 (on-frame (lambda (dt)
 
@@ -211,11 +241,11 @@
 	   (check-error)
 	   (glfw:poll-events) ; Because of the context version, initializing GLEW results in a harmless invalid enum
 
+	   (update-fps dt)
+
 	   (thread-yield!)))
 
 (define main-thread (thread-start! (make-thread main)))
-
-
 
 (comment
 

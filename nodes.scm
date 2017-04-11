@@ -11,6 +11,8 @@
   inputs ;; list of links
   outputs ;; list of links
   color
+  render-init-fn
+  mesh
   )
 
 (define-record-printer (node x out)
@@ -37,6 +39,8 @@
 
 (define (new-node parent-node #!key
 		  (render #f)
+		  (render-init #f)
+		  (mesh #f)
 		  (body #f)
 		  (shape #f)
 		  (id #f)
@@ -50,7 +54,9 @@
 		      (or id (next-id))
 		      '()
 		      '()
-		      color)])
+		      color
+		      render-init
+		      mesh)])
     (update! all-nodes conj n)
     (when parent-node
       (node-children-set! parent-node

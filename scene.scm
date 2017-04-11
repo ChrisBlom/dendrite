@@ -35,22 +35,23 @@
     (set! loaded-scene (init-scene scene-node space))
     (set! current-scene n)
     ;; TODO free old space
-    (set! the-space space))
+    (set! the-space space)
+    (init-node scene-node))
 
   (-run-physics- #t)
 
   (first loaded-scene))
 
 
-(comment
+;; (comment
 
- (unload)
+;;  (unload)
 
- (load-scene "1")
+;;  (load-scene "1")
 
- (display "1")
+;;  (display "1")
 
- )
+;;  )
 
 
 
@@ -74,8 +75,8 @@
 		((*render-constraint*) projection-matrix view-matrix ctx-matrix spring)))))
 
 (define (add-rotary-spring from to #!key
-		    (damping 0.5 )
-		    (stiffness 10.))
+		    (damping 0.8 )
+		    (stiffness 20.))
   (let [(spring (cp:damped-rotary-spring-new
 		 (node-body from)
 		 (node-body to)

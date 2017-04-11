@@ -200,3 +200,11 @@
   (if (positive? n)
       (cons (f) (repeatedly (- n 1) f))
       '()))
+
+(define (repeat-list n v)
+  (if (positive? n)
+      (cons v (repeat-list (- n 1) v))
+      '()))
+(use miscmacros)
+
+(repeat-list 10 1)

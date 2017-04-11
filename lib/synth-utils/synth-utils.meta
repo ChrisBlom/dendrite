@@ -1,0 +1,6 @@
+((author "Chris Blom")
+ (synopsis "synth-tuils")
+ (license "BSD")
+ (test-depends test srfi-42)
+ (category data)
+ (files "synth-utils.scm" "synth-utils.setup"))
