@@ -1,5 +1,15 @@
 
 (define (render-node node projection view ctx-matrix)
+
+  (let ([init-fn (node-render-init-fn node)])
+    (when init-fn
+      (init-fn node)
+      (node-render-init-fn-set! node #f) ;; only init once
+      )
+   #;(for-each (lambda (child)
+    (init-node child))
+    (node-children node)))
+
   (let ([render-fn (node-render-fn node)])
     ;; Render node
     (when render-fn
@@ -13,20 +23,13 @@
 		  (render-node child projection view sub-ctx))
 		(node-children node)))))
 
-(define (init-node node)
-  (let ([init-fn (node-render-init-fn node)])
-    ;; Render node
-    (when init-fn
-      (init-fn node))
-    (for-each (lambda (child)
-		(init-node child))
-	      (node-children node))))
-
 (define circle-mesh (disk 20))
 
 (define rectangle-mesh rect)
 
 (define (render-mesh mesh program mvp energy color)
+  (assert mesh "missing mesh")
+
   (gl:use-program program)
   (gl:bind-vertex-array 0)
 
@@ -140,22 +143,22 @@
 
 (define (v->point v) (make-point (cp:v.x v) (cp:v.y v) 0))
 
-(*render-poly* (lambda (node projection-matrix view-matrix ctx-matrix)
-		 (let* ([poly-shape (node-shape node)]
-			[n (cp:poly-shape-count poly-shape)]
-			[body-pos (cp:body-position (cp:shape-body poly-shape))]
-			[angle (cp:body-angle (cp:shape-body poly-shape))])
-
-		   (render-mesh (node-mesh node)
-				(cell-get program-poly)
-			      (m* projection-matrix
-				  (m* (translation (make-point (cp:v.x body-pos)
-							       (cp:v.y body-pos)
-							       0))
-				      (m* view-matrix
-					  (rotate-z angle (model-matrix)))))
-		   	      0.5
-		   	      (vector 0.5 3 0.5)))))
+(*render-poly*
+ (lambda (node projection-matrix view-matrix ctx-matrix)
+   (let* ([poly-shape (node-shape node)]
+	  [mesh (node-mesh node)]
+	  [body-pos (cp:body-position (cp:shape-body poly-shape))]
+	  [angle (cp:body-angle (cp:shape-body poly-shape))])
+     (render-mesh mesh (cell-get program-poly)
+		  (m* projection-matrix
+		      (m* (translation (make-point (cp:v.x body-pos)
+						   (cp:v.y body-pos)
+						   0))
+			  (m* view-matrix
+			      (rotate-z angle (model-matrix)))))
+		  0.5
+		  (or (node-color node)
+		      (vector 0.5 1 0.5))))))
 
 (define *render-segment* (make-parameter #f))
 

@@ -9,7 +9,7 @@ uniform vec3 colormod;
 
 // FOOBAR
 void main(){
-   gl_Position = MVP * vec4(position, 0.0, 0.92);
+   gl_Position = MVP * vec4(position, 0.0, 1.0);
    float d =   sqrt((position.x * position.x) + (position.y * position.y) );
    float v = 0.5;
    float dd = max( sin(d*2+1)*.5+.5 ,0);

@@ -167,8 +167,26 @@
 				       1 3 2))
    mode: #:triangles))
 
-(define the-poly-mesh
-  (poly-mesh (list (cp:v -1 1)
-		   (cp:v 1 1)
-		   (cp:v 1 -1)
-		   (cp:v -1 -1))))
+(define (mesh-for-poly-shape poly-shape)
+  (let* ([n (cp:poly-shape-count poly-shape)]
+	 [vertices (map (cut cp:poly-shape-vert poly-shape <>) (iota n))])
+    (poly-mesh vertices)))
+
+;; called on start, to init all static meshes
+(define (mesh-init-vaos)
+  (mesh-make-vao! circle-mesh
+		  `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
+		    (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
+
+  (mesh-make-vao! square-mesh
+		  `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
+		    (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
+
+  (mesh-make-vao! rectangle-mesh
+		  `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
+		    (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
+
+  (mesh-make-vao! the-line-mesh
+		  `((position . ,(gl:get-attrib-location (cell-get program-line) "position"))
+		    (color . ,(gl:get-attrib-location (cell-get program-line) "color")))
+		  #:stream))

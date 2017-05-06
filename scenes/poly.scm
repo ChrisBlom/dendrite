@@ -46,28 +46,37 @@
 			     (cp:shape-set-friction 0.1)))
 
   (define edges-outer
-    (list->vector
-     (list-ec (:list x (circle-ring outer-count))
-	      (let* ([start (first x)]
-		     [end (second x)]
-		     [start-pos (cp:v (car start) (cdr start))]
-		     [end-pos (cp:v (car end) (cdr end))]
-		     [center-pos (cp:vlerp start-pos end-pos 0.5)]
-		     [mass 0.3]
-		     [radius 0.2]
-		     [body-center (cp:body-new (cp:moment-for-segment mass start-pos end-pos radius) mass)]
-		     [shape (cp:circle-shape-new body-center radius cp:v0)])
+    (list-ec (:list x (circle-ring outer-count))
+	     (let* ([start (first x)]
+		    [end (second x)]
+		    [start-pos (cp:v (car start) (cdr start))]
+		    [end-pos (cp:v (car end) (cdr end))]
+		    [center-pos (cp:vlerp start-pos end-pos 0.5)]
+		    [mass 0.3]
+		    [radius 0.2]
+		    [body-center (cp:body-new (cp:moment-for-segment mass start-pos end-pos radius) mass)]
+		    [shape (cp:circle-shape-new body-center radius cp:v0)])
 
-		(set! (cp:body-position body-center) center-pos)
-		(cp:space-add-body space body-center)
-		(cp:space-add-shape space shape)
-		(let* ([n (new-node  scene-node
-				     #:render (lambda (node projection-matrix view-matrix ctx-matrix)
-						((*render-circle-shape*) node projection-matrix view-matrix shape))
-				     #:body body-center
-				     #:shape shape
-				     #:color (vector 1 0 0))])
-		  n)))))
+	       (set! (cp:body-position body-center) center-pos)
+	       (cp:space-add-body space body-center)
+	       (cp:space-add-shape space shape)
+	       (let* ([n (new-node  scene-node
+				    #:render (lambda (node projection-matrix view-matrix ctx-matrix)
+					       ((*render-circle-shape*) node projection-matrix view-matrix shape))
+				    #:body body-center
+				    #:shape shape
+				    #:color (vector 1 0 0))])
+		 n))))
+
+  ;; (define a
+  ;;   (let ([r (list->ringbuffer edges-outer)])
+  ;;     (list-ec (:range j 0 (length edges-outer))
+  ;; 	       (let ([a (ringbuffer-get r j)]
+  ;; 		     [b (ringbuffer-get r (+ 1 j))])
+  ;; 		 (add-line a b)
+
+  ;; 		 ))))
+
   ;;  -1 1       1 1
   ;;
   ;;
@@ -87,23 +96,20 @@
     (cp:space-add-body space body)
     (cp:space-add-shape space shape)
 
+    (new-node scene-node
+	      #:render
+	      (lambda (node projection-matrix view-matrix ctx-matrix)
+		((*render-poly*) node projection-matrix view-matrix ctx-matrix))
+	      #:render-init
+	      (lambda (node)
+		(let ([mesh (poly-mesh v)])
+		  (mesh-make-vao! mesh
+				  `((position . ,(gl:get-attrib-location (cell-get program-poly) "position"))
+				    (color . ,(gl:get-attrib-location (cell-get program-poly) "color"))))
+		  (node-mesh-set! node mesh)))
 
-
-    (set! dbg (new-node scene-node
-			#:render
-			(lambda (node projection-matrix view-matrix ctx-matrix)
-			  ((*render-poly*) node projection-matrix view-matrix ctx-matrix))
-			#:render-init
-			(lambda (node)
-			  (let ([mesh (poly-mesh v)])
-
-			    (mesh-make-vao! mesh
-					    `((position . ,(gl:get-attrib-location (cell-get program-line) "position"))
-					      (color . ,(gl:get-attrib-location (cell-get program-line) "color"))))
-			    (node-mesh-set! node mesh)))
-
-			#:body body
-			#:shape shape)))
+	      #:body body
+	      #:shape shape))
 
 
   (list "poly" scene-node space))

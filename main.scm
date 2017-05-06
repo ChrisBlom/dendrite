@@ -49,104 +49,31 @@
 (define the-space #f)
 (define the-mouse-v (make-parameter (cp:v 0 0)))
 (define the-mouse-ball (make-parameter #f))
-
 (define -run-physics- (make-parameter #t))
+
+(define on-frame (make-parameter #f))
+
+(define (toggle-physics)
+  (-run-physics- (not (-run-physics-))))
 
 (define root-node (new-node #f))
 
 (define interaction-node (new-node root-node))
-;;;; Scene Setup
-
-(define (add-ball parent-node space x y idx
-		  #!key
-		  (elasticity 0.95)
-		  (friction 0.2)
-		  (mass 1.)
-		  (radius 0.1)
-		  (velocity #f)
-		  (color (vector 0 1 1)))
-  (let* ((moment (cp:moment-for-circle mass 0. radius cp:v0))
-	 (body (cp:body-new  mass moment))
-	 (shape (cp:circle-shape-new body radius cp:v0)))
-
-    (set! (cp:shape-collision-type shape) 1)
-    (set! (cp:body-position body) (cp:v (exact->inexact x) (exact->inexact y)))
-
-    (when velocity
-      (set! (cp:body-velocity body) velocity))
-    (cp:space-add-body space body)
-
-    (set! (cp:shape-friction shape) friction)
-    (set! (cp:shape-elasticity shape) elasticity)
-
-    (cp:space-add-shape space shape)
-
-    (new-node parent-node
-	      #:render (render-ball idx)
-	      #:id idx
-	      #:body body
-	      #:shape shape
-	      #:color color)))
-
-;;;; Physics
-
-
-;; (comment
-
-;;  (load-scene "2")
-
-;;  (first loaded-scene)
-
-;;  (unload)
-
-;; ; (add-ball (cadr loaded-scene) the-space 10. 10. 0 #:radius 0.2 #:friction 0.01)
-
-;;  )
 
 (define (add-node-at-pos)
   (let ([m (the-mouse-v)])
     (add-ball interaction-node the-space (cp:v.x m) (cp:v.y m) (next-id)
 	      #:radius 0.2
-	      #:velocity (v-rand 10))
+	      #:velocity (v-rand 10)
+	      #:color (vector
+		       (/ (random 255) 255.0)
+		       (/ (random 255) 255.0)
+		       (/ (random 255) 255.0))
+	      )
     m))
 
-;;;; Graphics
-
-;;; Camera
-
-;(define projection-matrix (make-parameter (perspective 600 600 1 10 70)))
-
-(define projection-matrix (make-parameter (ortho 10 10  0.2 100)))
-
-(define the-eye-point (make-parameter (make-point 0 0 5)))
-
-(the-eye-point (make-point 0 0 1))
-
-(define the-object-point (make-parameter (make-point 0 0 0)))
-
-(the-object-point (make-point 0 0 0))
-
-(define view-matrix
-  (make-parameter (look-at (the-eye-point)
-			   (the-object-point)
-			   (make-point 0 1 0)))) ; up vector
-
-(view-matrix
- (look-at (make-point 0 0 10)
-	  (make-point 0 0 0)
-	  (make-point 0 1 0)))
-
-(define (model-matrix)
-  (mat4-identity))
-
-;;;  Meshes
-
-
-;;; Window setup
-
+(include "camera.scm")
 (include "input.scm")
-
-(define on-frame (make-parameter #f))
 
 (define (main)
 
@@ -167,36 +94,13 @@
 
    (start-all-cells)
 
-   (load-scene "poly")
-
+   (load-scene (string-trim-both (read-all "SCENE")))
 
    ;(gl:bind-texture gl:+texture-2d+ (cell-get noise-image-texture))
  ;  (gl:tex-parameteri gl:+texture-2d+ gl:+texture-min-filter+ gl:+linear+)
 
    ;; create vertex array object for mesh
-   (mesh-make-vao! circle-mesh
-		   `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
-		     (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
-
-   (mesh-make-vao! square-mesh
-		   `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
-		     (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
-
-   (mesh-make-vao! rectangle-mesh
-		   `((position . ,(gl:get-attrib-location (cell-get program1) "position"))
-		     (color . ,(gl:get-attrib-location (cell-get program1) "color"))))
-
-   (mesh-make-vao! the-line-mesh
-		   `((position . ,(gl:get-attrib-location (cell-get program-line) "position"))
-		     (color . ,(gl:get-attrib-location (cell-get program-line) "color")))
-		   #:stream)
-
-   (mesh-make-vao! the-poly-mesh
-		   `((position . ,(gl:get-attrib-location (cell-get program-line) "position"))
-		     (color . ,(gl:get-attrib-location (cell-get program-line) "color")))
-		   #:stream)
-
-
+   (mesh-init-vaos)
 
    ;; main loop
    (let loop ([i 0]
@@ -206,8 +110,7 @@
 	    [on-frame* (on-frame)])
        (when on-frame* (on-frame* dt)) ;; OPTIMIZE only unbox every x ms
        (unless (glfw:window-should-close (glfw:window))
-	 (loop (+ 1 i)
-	       now))))))
+	 (loop (+ 1 i) now))))))
 
 (define fps-buffer (new-ringbuffer 100))
 (define fps-sum 0)
@@ -224,62 +127,38 @@
  	   ;; process repl event
 	   (REPL)
 
-	   ;; advance physics
-	   (when (-run-physics-)
-	     (cp:space-step the-space 1/30))
+	   ;; update physics
+	   (when (-run-physics-) (cp:space-step the-space 1/30))
 
 	   ;; draw all nodes
 	   (glfw:swap-buffers (glfw:window))
 	   (gl:clear (bitwise-ior gl:+color-buffer-bit+ gl:+depth-buffer-bit+))
-
 	   (render-node root-node
 			(projection-matrix)
 			(view-matrix)
 			(m*s (mat4-identity) 2))
 
+	   (update-fps dt)
+
 	   ;; after render
 	   (check-error)
-	   (glfw:poll-events) ; Because of the context version, initializing GLEW results in a harmless invalid enum
-
-	   (update-fps dt)
+	   (glfw:poll-events) ; Because of the context version, initializing GLEW results in a harmless invalid
 
 	   (thread-yield!)))
 
 (define main-thread (thread-start! (make-thread main)))
 
-(comment
-
- (set! (cp:space-iterations the-space) 10)
-
- (thread-terminate! main-thread)
-
- (update-gravity the-space cp:v+ (cp:v 0. 1.))
-
- (update-gravity the-space (constantly (cp:v 0 0)))
-
- (cp:space-get-gravity the-space)
-
- )
-
-;; Local Variables:
-;; eval: (eldoc-mode -1)
-;; eval: (geiser-autodoc-mode -1)
-;; eval: (setq company-minimum-prefix-length 4)
-;; End:
-
-
-(let ((old (current-input-port)))
-     (current-input-port (make-parley-port old)))
+(let* ((old (current-input-port))
+       (parley-input-port (make-parley-port old)))
+  (current-input-port parley-input-port))
 
 (repl)
-
-
-
-
 
 (comment
 
  (remove-node (the-mouse-ball))
+
+
 
 
  (define ff (cp:shape-filter-new (cp:uint 1) cp:all-categories cp:all-categories))

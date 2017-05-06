@@ -14,10 +14,9 @@ void main(){
    float radial = clamp(v*id*0.1 , 0 , 1.0);
    float m = id*(c.a)*0.05  ;
 
-   fragColor = vec4(c.b,
-		    c.r,
-		    c.g,
-
+   fragColor = vec4(c.r*id*0.1,
+		    c.g*id*0.1,
+		    c.b*id*0.1,
 		    (edge + radial*c.a
 		    )*m+0.2
 		    //	    c.a*(edge/2*m + radial)*2
