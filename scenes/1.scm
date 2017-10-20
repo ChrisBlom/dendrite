@@ -3,7 +3,12 @@
      clojurian-syntax
      srfi-42
      gl-math
-     synth-utils)
+     chipmunk-utils
+     synth-utils
+     scene
+     nodes
+     render)
+
 
 (define wsz 5.)
 
@@ -270,3 +275,5 @@
   			 #:radius 0.1))))
 
   (list "1" scene-node space))
+
+(set-init init-scene)
