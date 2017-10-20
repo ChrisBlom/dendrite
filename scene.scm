@@ -1,5 +1,27 @@
+(module scene *
+  (import scheme chicken utils srfi-1)
+  (use (prefix glfw3 glfw:)
+       (prefix opengl-glew gl:)
+       (prefix chipmunk cp:)
+       clojurian-syntax
+       synth-utils
+       ringbuffer
+       matchable
+       extras
+       gl-utils
+       symbol-utils
 
-;; (name node-scene space)
+       chipmunk-utils
+       pipeline
+       reactive
+       nodes
+       global
+       mesh
+       render)
+
+
+
+  ;; (name node-scene space)
 (define-once loaded-scene #f)
 
 (define-once current-scene #f)
@@ -16,9 +38,13 @@
 
 (define (scene-reload)
   (load-scene current-scene)
-  (remove-children interaction-node))
+					;  (remove-children interaction-node)
+  )
 
-;; returns (name scene-node space)
+  ;; returns (name scene-node space)
+
+(define set-init (make-parameter (lambda (a b) (println "No scene loaded"))))
+
 (define (load-scene n)
 
   (load-relative (string-append "scenes/" n ".scm"))
@@ -30,8 +56,10 @@
   (let ([space (cp:space-new)]
 	[scene-node (new-node root-node)])
 
+    (set! interaction-node (new-node scene-node))
+
     (cp:space-set-iterations space 20) ; 10 default, can be overwritten by scene
-    (set! loaded-scene (init-scene scene-node space))
+    (set! loaded-scene ( (set-init) scene-node space))
     (set! current-scene n)
 
     (set! the-space space)
@@ -45,15 +73,16 @@
   (first loaded-scene))
 
 
-;; (comment
+  ;; (comment
 
-;;  (unload)
+  ;;  (unload)
 
-;;  (load-scene "1")
+  ;;  (load-scene "1")
 
-;;  (display "1")
+  ;;  (display "1")
 
-;;  )
+  ;;  )
+
 
 
 
@@ -77,8 +106,8 @@
 		((*render-constraint*) projection-matrix view-matrix ctx-matrix spring)))))
 
 (define (add-rotary-spring from to #!key
-		    (damping 0.8 )
-		    (stiffness 20.))
+			   (damping 0.8 )
+			   (stiffness 20.))
   (let [(spring (cp:damped-rotary-spring-new
 		 (node-body from)
 		 (node-body to)
@@ -96,12 +125,12 @@
 		   (stiffness 10.))
   (let* [(s (cp:vlength (cp:v- (cp:body-position (node-body from))
 			       (cp:body-position (node-body to)))))
-	(spring (cp:slide-joint-new (node-body from)
-				    (node-body to)
-				    cp:v0
-				    cp:v0
-				    (* 0.8 s)
-				    (* 1.0 s)))]
+	 (spring (cp:slide-joint-new (node-body from)
+				     (node-body to)
+				     cp:v0
+				     cp:v0
+				     (* 0.8 s)
+				     (* 1.0 s)))]
     (cp:space-add-constraint the-space spring)
     (new-node interaction-node
 	      #:render
@@ -113,12 +142,12 @@
 	 [b (cp:body-position (node-body to))]
 	 [mass 2.0]
 	 [radius 0.05]
-	 [v (list a
-		  (cp:v+ a (cp:v 0.1 0.1))
-		  b
-		  (cp:v+ b (cp:v 0.1 0.1)))]
+	 [v-list (list a
+		       (cp:v+ a (cp:v 0.1 0.1))
+		       b
+		       (cp:v+ b (cp:v 0.1 0.1)))]
 	 [body (cp:body-new mass 0.1)]
-	 [shape (cp:create-polygon-shape body v cp:transform-identity radius)]
+	 [shape (cp:create-polygon-shape body v-list cp:transform-identity radius)]
 	 [pin-a (cp:pin-joint-new (node-body from)
 				  body
 				  (cp:body-world-to-local (node-body from) a)
@@ -152,17 +181,18 @@
 		((*render-poly*) node projection-matrix view-matrix ctx-matrix))
 	      #:render-init
 	      (lambda (node)
-		(let ([mesh (poly-mesh v)])
+		(let ([mesh (poly-mesh v-list)])
 		  (mesh-make-vao! mesh
 				  (list (cons 'position (gl:get-attrib-location (cell-get program-poly) "position"))
 					(cons 'color (gl:get-attrib-location (cell-get program-poly) "color"))))
 		  (node-mesh-set! node mesh))))))
 
-(define (add-ball parent-node space x y idx
+
+(define (add-ball parent-node space pos idx
 		  #!key
 		  (elasticity 0.95)
 		  (friction 0.2)
-		  (mass 1.)
+		  (mass 10.)
 		  (radius 0.1)
 		  (velocity #f)
 		  (color (vector 0 1 1)))
@@ -171,24 +201,114 @@
 	 (shape (cp:circle-shape-new body radius cp:v0)))
 
     (set! (cp:shape-collision-type shape) 1)
-    (set! (cp:body-position body) (cp:v (exact->inexact x) (exact->inexact y)))
+    (set! (cp:body-position body) pos)
 
     (when velocity
       (set! (cp:body-velocity body) velocity))
-    (cp:space-add-body space body)
 
     (set! (cp:shape-friction shape) friction)
     (set! (cp:shape-elasticity shape) elasticity)
 
+    (cp:space-add-body space body)
     (cp:space-add-shape space shape)
 
     (new-node parent-node
-	      #:render (render-ball idx)
+	      #:render  (lambda (node projection-matrix view-matrix ctx-matrix)
+			  ((*render-circle-shape*) node projection-matrix view-matrix shape))
 	      #:id idx
 	      #:body body
 	      #:shape shape
 	      #:color color)))
 
+(define ball-size 2.0)
+
+(define (add-node-at-pos)
+  (let ([mouse-pos (the-mouse-v)])
+    (add-ball interaction-node the-space mouse-pos (next-id)
+	      #:radius (+ ball-size (* 0.1 (random 10)))
+	      #:mass 40.
+	      #:velocity (v-rand 10)
+	      #:color (vector
+		       (/ (random 255) 255.0)
+		       (/ (random 255) 255.0)
+		       (/ (random 255) 255.0))
+	      )
+    mouse-pos))
+
+(define (box-node parent-node space position
+		  #!key
+		  (width 0.5)
+		  (height 0.5)
+		  (elasticity 0.0)
+		  (friction 2.0)
+		  (mass 1.)
+		  (radius 0.0))
+  (let* ([body (cp:body-new mass (cp:moment-for-box width height radius))]
+	 [shape (cp:box-shape-new body width height radius)])
+
+    (set! (cp:shape-elasticity shape) elasticity)
+    (set! (cp:shape-friction shape) friction)
+    (set! (cp:body-position body) position)
+
+    (cp:space-add-body space body)
+    (cp:space-add-shape space shape)
+
+    (new-node parent-node
+	      #:render
+	      (lambda (node projection-matrix view-matrix ctx-matrix)
+		((*render-poly*) node projection-matrix view-matrix ctx-matrix))
+	      #:render-init
+	      (lambda (node)
+		(let ([mesh (mesh-for-poly-shape shape)]
+		      [p (compile-shaders! (read-all "vertex-shaders/poly.glsl")
+					   (read-all "fragment-shaders/poly.glsl"))])
+		  (mesh-make-vao! mesh `((position . ,(gl:get-attrib-location p #;(cell-get program-poly) "position"
+									      ))
+					 (color . ,(gl:get-attrib-location p #;(cell-get program-poly) "color"
+									   ))))
+		  (node-mesh-set! node mesh)))
+	      #:body body
+	      #:shape shape)))
+
+(define (add-box position)
+  (box-node interaction-node the-space position))
+
+(define (update-gravity space f . args)
+  (let ([new-gravity (apply f (cp:space-get-gravity space) args)])
+    (cp:space-set-gravity space new-gravity)
+    new-gravity))
+
+(define (poly-node parent-node space
+		   #!key
+		   (position #f)
+		   (vertices (circle 4))
+		   (elasticity 0.02)
+		   (friction 0.6)
+		   (mass 1.)
+		   (radius 0.0))
+  (let* ([body (cp:body-new mass (cp:moment-for-polygon mass vertices cp:v0 radius))]
+	 [shape (cp:create-polygon-shape body vertices cp:transform-identity radius)])
+
+    (set! (cp:shape-elasticity shape) elasticity)
+    (set! (cp:shape-friction shape) friction)
+    (when position (set! (cp:body-position body) position))
+
+    (cp:space-add-body space body)
+    (cp:space-add-shape space shape)
+
+    (new-node parent-node
+	      #:render
+	      (lambda (node projection-matrix view-matrix ctx-matrix)
+		((*render-poly*) node projection-matrix view-matrix ctx-matrix))
+	      #:render-init
+	      (lambda (node)
+		(let ([mesh (mesh-for-poly-shape shape)])
+		  (mesh-make-vao! mesh `((position . ,(gl:get-attrib-location (cell-get program-poly) "position"))
+					 (color . ,(gl:get-attrib-location (cell-get program-poly) "color")))
+				  #:stream)
+		  (node-mesh-set! node mesh)))
+	      #:body body
+	      #:shape shape)))
 
 
 (comment
@@ -196,3 +316,5 @@
  (add-line (first (node-children interaction-node)) (second (node-children interaction-node)))
 
  )
+
+)

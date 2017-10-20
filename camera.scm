@@ -1,3 +1,12 @@
+(module camera *
+  (import chicken scheme srfi-1 srfi-4 )
+  (use (prefix glfw3 glfw:)
+       (prefix opengl-glew gl:)
+       (prefix chipmunk cp:)
+       gl-math
+       gl-utils
+       clojurian-syntax
+       synth-utils)
 
 (define zoom 10)
 
@@ -47,4 +56,4 @@
 (update-view-matrix)
 
 (define (model-matrix)
-  (mat4-identity))
+  (mat4-identity)))

@@ -1,4 +1,13 @@
-(use srfi-1 gl-math   gl-utils)
+(module nodes *
+  (import chicken scheme)
+  (use (prefix chipmunk cp:)
+       srfi-1
+       gl-math
+       gl-utils
+       box
+       ringbuffer
+       synth-utils
+       global)
 
 (define-record node
   render-fn ;; takes node , mvp
@@ -29,7 +38,6 @@
 
 (define (conj list elem)
   (cons elem list))
-
 
 ;; inserts a new ball at the current cursor
 (define the-counter (box 0))
@@ -83,8 +91,8 @@
 		    node)))
 
 (define (link-add src trg n)
-  (let ([buffer (new-ringbuffer n)]
-	[link (make-link src trg buffer)])
+  (let* ([buffer (new-ringbuffer n)]
+	 [link (make-link src trg buffer)])
     (update! (node-outputs src) (conj link))
     (update! (node-inputs trg) (conj link))
     link))
@@ -116,3 +124,12 @@
   (for-each (lambda (child)
 	      (remove-subtree node child))
 	    (node-children node)))
+
+;;;; Globals
+
+(define root-node (new-node #f))
+
+(define interaction-node (new-node root-node))
+
+
+)

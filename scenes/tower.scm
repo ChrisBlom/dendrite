@@ -2,80 +2,70 @@
      ringbuffer
      clojurian-syntax
      srfi-42
-     gl-math)
+     gl-math
+     chipmunk-utils
+     synth-utils
+     scene)
 
-(define wsz 5.)
+(define wsz 5)
 
 (define the-damping 0.5)
 
-(define (box-node parent-node space position
-		  #!key
-		  (width 0.6)
-		  (height 0.6)
-		  (elasticity 0.02)
-		  (friction 0.6)
-		  (mass 1.)
-		  (radius 0.02))
-  (let* ([body (cp:body-new mass (cp:moment-for-box width height radius))]
-	 [shape (cp:box-shape-new body width height radius)])
-
-    (set! (cp:shape-elasticity shape) elasticity)
-    (set! (cp:shape-friction shape) friction)
-    (set! (cp:body-position body) position)
-
-    (cp:space-add-body space body)
-    (cp:space-add-shape space shape)
-
-    (new-node parent-node
-	      #:render
-	      (lambda (node projection-matrix view-matrix ctx-matrix)
-		((*render-poly*) node projection-matrix view-matrix ctx-matrix))
-	      #:render-init
-	      (lambda (node)
-		(let ([mesh (mesh-for-poly-shape shape)])
-		  (mesh-make-vao! mesh `((position . ,(gl:get-attrib-location (cell-get program-poly) "position"))
-					 (color . ,(gl:get-attrib-location (cell-get program-poly) "color"))))
-		  (node-mesh-set! node mesh)))
-	      #:body body
-	      #:shape shape)))
-
-(define (add-box position)
-  (box-node interaction-node the-space position))
-
 (define (init-scene scene-node space)
+
+  (set! (cp:space-gravity space) (cp:v 0 -9.8))
 
   (define stiffness 50.)
 
   ;; walls
-  (cp:space-add-shapes space
-		       (doto (fixed-line-segment space (cp:v (- wsz) (- wsz)) (cp:v (- wsz) wsz) radius: 0.4)
-			     (cp:shape-set-elasticity 0.95)
-			     (cp:shape-set-friction 0.1))
-		       (doto (fixed-line-segment space (cp:v (- wsz) wsz) (cp:v wsz wsz) radius: 0.4)
-			     (cp:shape-set-elasticity 0.95)
-			     (cp:shape-set-friction 0.1))
-		       (doto (fixed-line-segment space (cp:v wsz wsz) (cp:v wsz (- wsz)) radius: 0.4)
-			     (cp:shape-set-elasticity 0.95)
-			     (cp:shape-set-friction 0.1))
-		       (doto (fixed-line-segment space (cp:v wsz (- wsz)) (cp:v (- wsz) (- wsz)) radius: 0.4)
-			     (cp:shape-set-elasticity 0.95)
-			     (cp:shape-set-friction 0.1)))
+  (let ([wall-friction 1.0]
+	[wall-elasticity 0.95]
+	[right 20]
+	[l -40]
+	[r 40]
+	[bottom -10]
+	[top 60 ])
+    (cp:space-add-shapes space
+			 (doto (fixed-line-segment space (cp:v l bottom) (cp:v l top) radius: 0.4)
+			       (cp:shape-set-elasticity wall-elasticity)
+			       (cp:shape-set-friction wall-friction))
+			 (doto (fixed-line-segment space (cp:v l top) (cp:v r top) radius: 0.4)
+			       (cp:shape-set-elasticity wall-elasticity)
+			       (cp:shape-set-friction wall-friction))
+			 (doto (fixed-line-segment space (cp:v r top) (cp:v r bottom) radius: 0.4)
+			       (cp:shape-set-elasticity wall-elasticity)
+			       (cp:shape-set-friction wall-friction))
+			 (doto (fixed-line-segment space (cp:v r bottom) (cp:v l bottom) radius: 0.4)
+			       (cp:shape-set-elasticity wall-elasticity)
+			       (cp:shape-set-friction wall-friction))
 
-  (let ([n 10])
-    (list-ec (:range i 0 n)
-	     (let ([angle (* i (/ n) pi 2)])
-	       (box-node scene-node space (cp:v (* 2 (sin angle))
-						(* 2 (cos angle)))))))
+
+			 (doto (fixed-line-segment space
+						   (cp:v -2 bottom)
+						   (cp:v l (* 0.5 bottom))
+						   radius: 0.4)
+			       (cp:shape-set-elasticity wall-elasticity)
+			       (cp:shape-set-friction wall-friction))))
+
+
+
+
+  (for-each (lambda (j) (list-ec (:range i 0 40)
+				 (box-node scene-node space
+					   (cp:v (+ (* 0.25 (% i 2)) (* j 0.51))
+						 (+ -9 (* i 0.49)))
+					   #:mass 0.1)))
+	    (range -6 6))
+
+  ;; (poly-node scene-node space
+  ;; 	     #:postion (cp:v 0 0)
+  ;; 	     #:vertices
+  ;; 	     (list (cp:v -3 7)
+  ;; 		   (cp:v 3 7)
+  ;; 		   (cp:v 0.1 9)
+  ;; 		   (cp:v -0.1 9)))
+
 
   (list "tower" scene-node space))
 
-(comment
-
-; (cp:space-constraints space)
- )
-
-
-(cp:varray (cp:v -1 1)
-	   (cp:v 1 1)
-	   (cp:v 1 -1)
-	   (cp:v -1 -1))
+(set-init init-scene)

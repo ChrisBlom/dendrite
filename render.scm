@@ -1,3 +1,18 @@
+(module render *
+  (import scheme chicken srfi-4)
+  (use  (prefix chipmunk cp:)
+	(prefix opengl-glew gl:)
+	gl-math
+	gl-utils
+	synth-utils
+
+	pipeline
+	camera
+	reactive
+	nodes
+	mesh
+	global
+	chipmunk-utils)
 
 (define (render-node node projection view ctx-matrix)
 
@@ -6,7 +21,8 @@
       (init-fn node)
       (node-render-init-fn-set! node #f) ;; only init once
       )
-   #;(for-each (lambda (child)
+
+    #;(for-each (lambda (child)
     (init-node child))
     (node-children node)))
 
@@ -22,8 +38,6 @@
       (for-each (lambda (child)
 		  (render-node child projection view sub-ctx))
 		(node-children node)))))
-
-(define circle-mesh (disk 20))
 
 (define rectangle-mesh rect)
 
@@ -43,6 +57,7 @@
 
   (gl:uniform3fv (gl:get-uniform-location program "colormod") 1
 		 (list->f32vector (vector->list color)))
+
   ;; render mesh
   (let ([vao (mesh-vao mesh)])
     (when vao
@@ -52,16 +67,18 @@
 				    (type->gl (mesh-index-type mesh))
 				    #f 0))))
 
-(define ((render-ball idx) node projection-matrix view-matrix ctx-matrix)
+(define ((render-ball idx radius) node projection-matrix view-matrix ctx-matrix)
   (let* ([body  (node-body node)]
+	 [shape (node-shape node)]
 	 [angle (- (cp:body-angle body))]
 	 [body-pos (cp:body-position body)]
 	 [mvp (m* projection-matrix
 		  (m* (translation (make-point (cp:v.x body-pos)
 					       (cp:v.y body-pos)
 					       0))
+		      (scale radius
 		      (m* view-matrix
-			  (rotate-z angle (model-matrix)))))])
+				 (rotate-z angle (model-matrix))))))])
     (render-mesh circle-mesh
 		 (cell-get program1)
 		 mvp
@@ -82,14 +99,17 @@
 				[body-pos (cp:body-get-position body)]
 				[trans (make-point (cp:v.x body-pos)
 						   (cp:v.y body-pos)
-						   0)])
+						   0)]
+				[radius (cp:circle-shape-radius (node-shape node))])
 
 			   (render-mesh circle-mesh
 					(cell-get program3)
 					(m* projection-matrix
 					    (m* (translation trans)
 						(m* view-matrix
-						    (rotate-z angle (model-matrix)))))
+						    (scale radius
+							   (rotate-z angle
+								     (model-matrix))))))
 
 					(cp:vlength (cp:body-get-velocity body))
 
@@ -140,8 +160,6 @@
 
 
 (define *render-poly* (make-parameter #f))
-
-(define (v->point v) (make-point (cp:v.x v) (cp:v.y v) 0))
 
 (*render-poly*
  (lambda (node projection-matrix view-matrix ctx-matrix)
@@ -196,5 +214,5 @@
 		   (render-mesh the-line-mesh
 				(cell-get program-line)
 				(m* projection-matrix (m* view-matrix (model-matrix)))
-				(cp:constraint-get-impulse constraint)
-				(vector 1 1 0)))))
+				0.5 ;;(cp:constraint-get-impulse constraint)
+				(vector 1 1 0))))))

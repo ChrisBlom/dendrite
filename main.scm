@@ -1,39 +1,41 @@
-(import chicken scheme srfi-42 synth-utils)
+(module main *
+  (import chicken scheme srfi-1 srfi-42 foreign srfi-13)
+  (use (prefix glfw3 glfw:)
+       (prefix opengl-glew gl:)
+       (prefix chipmunk cp:)
+					;     parley
+       gl-math
+       gl-utils
+       srfi-4 ; vectors
+       srfi-18 ; green threads
+					;     nrepl
+       clojurian-syntax
+       synth-utils
+       prepl
+       utils
+       posix
+       ringbuffer
+       matchable
+       extras
+       symbol-utils
 
-(import-for-syntax srfi-42 synth-utils)
 
-(use (prefix glfw3 glfw:)
-     (prefix opengl-glew gl:)
-     (prefix chipmunk cp:)
-     parley
-     gl-math
-     gl-utils
-     srfi-4 ; vectors
-     srfi-18 ; green threads
-     nrepl
-     clojurian-syntax
-     prepl
-     utils
-     symbol-utils
-     posix
-     ringbuffer
-     matchable
-     extras)
+       global
+       nodes
+       render
+       camera
+       pipeline
+       reactive
+       mesh
+       scene
+       chipmunk-utils)
 
-(define (repeat-list n x)
+  (define (repeat-list n x)
   (if (positive? n)
     (cons x (repeat-list (- n 1) x))
     '()))
 
 ;;;;; Utils ;;;;;
-
-(include "mesh.scm")
-(include "chipmunk-utils.scm")
-(include "reactive.scm")
-(include "pipeline.scm")
-(include "nodes.scm")
-(include "scene.scm")
-(include "render.scm")
 
 (when (unbound? 'REPL)
   (define repl-port 6062)
@@ -46,34 +48,44 @@
 
 ;;;; Globals
 
-(define the-space #f)
-(define the-mouse-v (make-parameter (cp:v 0 0)))
-(define the-mouse-ball (make-parameter #f))
-(define -run-physics- (make-parameter #t))
-
-(define on-frame (make-parameter #f))
 
 (define (toggle-physics)
   (-run-physics- (not (-run-physics-))))
 
-(define root-node (new-node #f))
 
-(define interaction-node (new-node root-node))
+(define (in)
+  (define event #f)
 
-(define (add-node-at-pos)
-  (let ([m (the-mouse-v)])
-    (add-ball interaction-node the-space (cp:v.x m) (cp:v.y m) (next-id)
-	      #:radius 0.2
-	      #:velocity (v-rand 10)
-	      #:color (vector
-		       (/ (random 255) 255.0)
-		       (/ (random 255) 255.0)
-		       (/ (random 255) 255.0))
-	      )
-    m))
+ ;;  (define begin-func (lambda (space arbiter data)
+;; 		       (set! event 'begin ) #t))
+;; ;
+  (define presolve-func (lambda (space arbiter data)
+			  (set! event 'presolve ) 1))
 
-(include "camera.scm")
-(include "input.scm")
+  (define postsolve-func (lambda (space arbiter data)
+			   (set! event 'postsolve)))
+
+  (define separate-func (lambda (space arbiter data)
+			  (set! event 'separate)))
+
+  ;; (define dispatch-data-tuple (cp:new-gc-root
+  ;; 			       (list (lambda (type)
+  ;; 				       (print 'dispatch type)
+  ;; 				       (case type
+  ;; 					 ((begin-func) begin-func)
+  ;; 					 ((presolve-func) presolve-func)
+  ;; 					 ((postsolve-func) postsolve-func)
+  ;; 					 ((separate-func) separate-func)
+  ;; 					 (else (error "internal error dispatching callback function."))))
+  ;; 				     (list))))
+
+  (define handler (cp:space-add-default-collision-handler the-space))
+
+  `(handler ,handler)
+
+;  (cp:collision-handler-user-data-set! handler dispatch-data-tuple)
+  (cp:collision-handler-begin-func-init! handler)
+)
 
 (define (main)
 
@@ -90,17 +102,21 @@
    (gl:init)
    (gl:enable gl:+multisample+)
    (gl:enable gl:+blend+)
+
    (gl:blend-func gl:+src-alpha+ gl:+one-minus-src-alpha+ )
 
    (start-all-cells)
 
-   (load-scene (string-trim-both (read-all "SCENE")))
-
+   (let ([s (string-trim-both (read-all "INIT_SCENE"))])
+     (println "Loading scene" s)
+     (load-scene s))
+   ;;(in)
    ;(gl:bind-texture gl:+texture-2d+ (cell-get noise-image-texture))
  ;  (gl:tex-parameteri gl:+texture-2d+ gl:+texture-min-filter+ gl:+linear+)
 
    ;; create vertex array object for mesh
    (mesh-init-vaos)
+
 
    ;; main loop
    (let loop ([i 0]
@@ -122,13 +138,16 @@
 (define (fps)
   (/ 1000 fps-sum (- (ringbuffer-length fps-buffer) 1)))
 
+(define step (make-parameter 1/60))
+
+
 (on-frame (lambda (dt)
 
- 	   ;; process repl event
-	   (REPL)
+ 	   ;; ;; process repl event
+	   ;; (REPL)
 
 	   ;; update physics
-	   (when (-run-physics-) (cp:space-step the-space 1/30))
+	   (when (-run-physics-) (cp:space-step the-space (step)))
 
 	   ;; draw all nodes
 	   (glfw:swap-buffers (glfw:window))
@@ -147,19 +166,37 @@
 	   (thread-yield!)))
 
 (define main-thread (thread-start! (make-thread main)))
+;(main)
 
-(let* ((old (current-input-port))
-       (parley-input-port (make-parley-port old)))
-  (current-input-port parley-input-port))
+;; (let* ((old (current-input-port))
+;;        (parley-input-port (make-parley-port old)))
+;;   (current-input-port parley-input-port))
+
+					;(cp:collision-handler-presolve-func-set! handler cp:_collision_presolve_bridge)
+					;(cp:collision-handler-postsolve-func-set! handler cp:_collision_postsolve_bridge)
+
+
+(comment
+
+ (when begin-func (set! (collision-handler-begin-func handler) #$_collision_begin_bridge))
+ (when presolve-func (set! (collision-handler-pre-solve-func handler) #$_collision_presolve_bridge))
+ (when postsolve-func (set! (collision-handler-post-solve-func handler) #$_collision_postsolve_bridge))
+ (when separate-func (set! (collision-handler-separate-func handler) #$_collision_separate_bridge))
+					;(set! (collision-handler-user-data handler) dispatch-data-tuple)
+ (cons handler dispatch-data-tuple))
+
+;; (cp:xspace-add-collision-handler the-space
+;; 				 #:collision-type-a cp:wildcard-collision-type
+;; 				 #:collision-type-b cp:wildcard-collision-type
+;; 				 #:data 0)
 
 (repl)
+
+
 
 (comment
 
  (remove-node (the-mouse-ball))
-
-
-
 
  (define ff (cp:shape-filter-new (cp:uint 1) cp:all-categories cp:all-categories))
 
@@ -185,7 +222,16 @@
   (cut equal? p <>)
   (cp:space-shapes the-space))
 
+; (define h (cp:space-add-collision-handler the-space 0 0 ))
+
+ (define hdbg #f)
+
+
+
+
+
 )
 (comment
  ;; reset root node
  (node-children-set! root-node '()))
+)

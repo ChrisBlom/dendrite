@@ -3,3 +3,13 @@
 *.so
 *.o
 /main
+*.import.scm
+/global
+/input
+/mesh
+/nodes
+/pipeline
+/reactive
+/camera
+/render
+/chipmunk-utils

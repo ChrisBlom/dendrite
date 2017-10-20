@@ -2,7 +2,8 @@
      ringbuffer
      clojurian-syntax
      srfi-42
-     gl-math)
+     gl-math
+     synth-utils)
 
 (define wsz 5.)
 
@@ -263,8 +264,8 @@
   	     (let ([angle (/ (* pi 2 i 8) n)]
   		   [radius (* 2 (/ i n))])
   	       (add-ball scene-node space
-  			 (* radius (sin angle))
-  			 (* radius (cos angle))
+  			 (cp:v (* radius (sin angle))
+			       (* radius (cos angle)))
   			 i
   			 #:radius 0.1))))
 

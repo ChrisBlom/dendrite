@@ -1,0 +1,7 @@
+((author "Chris Blom")
+ (synopsis "Simple physics game skeleton")
+ (license "MIT")
+ (needs glfw3 opengl-glew chicken-chipmunk-7 clojurian prepl)
+ (test-depends test)
+ (category games)
+ (files "dendrite.scm" "dendrite.setup"))

@@ -161,15 +161,4 @@
 		       (list constraint rot-constraint)))))
 
 
-  ;; ;; filling
-  ;; (let ([n 100])
-  ;;   (list-ec (:range i n)
-  ;; 	     (let ([angle (/ (* pi 2 i 8) n)]
-  ;; 		   [radius (* 2 (/ i n))])
-  ;; 	       (add-ball scene-node space
-  ;; 			 (* radius (sin angle))
-  ;; 			 (* radius (cos angle))
-  ;; 			 i
-  ;; 			 #:radius 0.1))))
-
   (list "2" scene-node space))
