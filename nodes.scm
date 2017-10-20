@@ -93,8 +93,8 @@
 (define (link-add src trg n)
   (let* ([buffer (new-ringbuffer n)]
 	 [link (make-link src trg buffer)])
-    (update! (node-outputs src) (conj link))
-    (update! (node-inputs trg) (conj link))
+    (update! (node-outputs src) conj link)
+    (update! (node-inputs trg) conj link)
     link))
 
 (define a '())
