@@ -1,35 +1,29 @@
 ;; Mouse and keyboard input
+
 ;;;; Key handler
+
 (define key-handler (make-parameter
 		     (lambda (a . args)
 		       (display 'no-keyhandler))))
 
 (glfw:key-callback (lambda (window key scancode action mods)
-		     (print 'key window key scancode action mods)
-		     ((key-handler) window key scancode action mods)
-                     (cond
-                      [(and (eq? key glfw:+key-escape+) (eq? action glfw:+press+))
-                       (glfw:set-window-should-close window #t)]
-		      [(and (eq? key glfw:+key-space+)
-			    (or (eq? action glfw:+press+)
-				(eq? action glfw:+repeat+)))
-		       (add-node-at-pos)])))
+		     ;; (print 'key window key scancode action mods)
+                     (when (and (eq? key glfw:+key-escape+) (eq? action glfw:+press+))
+		      (glfw:set-window-should-close window #t))
+		     ;; delegate to key-handler
+		     ((key-handler) window key scancode action mods)))
 
 ;;;; Mouse handler
 
-(define cursor-position-handler (make-parameter (lambda (a . args)
+(define mouse-position-handler (make-parameter (lambda (a . args)
 						  (display 'no-curser-position-handler))))
 
 (glfw:cursor-position-callback
  (lambda (window x y)
    (let [(orig (current-exception-handler))]
-     (comment (with-exception-handler
-		  (lambda (e)
-		    (println "Error in cursor-position-handler")
-		    (println e)
-		    (orig e))
-		(lambda ())))
-     ((cursor-position-handler) window x y))))
+     ((mouse-position-handler) window x y))))
+
+;;;; Mouse button handler
 
 (define mouse-button-handler
   (make-parameter (lambda (a . args)
@@ -37,26 +31,11 @@
 
 (glfw:mouse-button-callback
  (lambda (window button action mods)
-   ;(./trace (list 'mouse-button window button action mods))
    ((mouse-button-handler) window button action mods)))
 
-;;;; User:
-
-
-(case 1
-  [(1) 'a]
-  )
-
-
-
-
-;; set key handler
-
-
-;; set mouse handlers
+;;;; Assignment of handlers
 
 (define the-mouse-pos (make-parameter (cons 10. 10.)))
-
 
 (define (screen->world screen-point)
   (let* ([v (view-matrix)]
@@ -66,16 +45,12 @@
     (inverse world->screen ivp)
     (m* ivp screen-point)))
 
-;; 1    18
-;; 5  2000
-;; 9 25000
-
 (define (window->screen window-point)
   (v- (v* window-point 2/600)
       (make-point 1 1 0)))
 
 ;; TODO to coordinate transformation properly
-(cursor-position-handler
+(mouse-position-handler
  (lambda (window xx yy)
    (let* ([window-point (make-point xx yy 0)]
 	  [screen-point (window->screen window-point)]
@@ -87,9 +62,10 @@
 		       world-pos))
      (the-mouse-v (cp:v x y)))))
 
- (define ff (cp:shape-filter-new (cp:uint 2) cp:all-categories cp:all-categories))
+(define ff (cp:shape-filter-new (cp:uint 2) cp:all-categories cp:all-categories))
 
 (define prev-event '(none #f))
+
 (define cur-event '(none #f) )
 
 (define modes '(spring line ball box impulse force))
@@ -106,15 +82,19 @@
   (println "mode:" (car modes))
   modes)
 
+;; set key handler
 (key-handler
  (lambda (window key scancode action mods)
    (when (or (equal? action glfw:+press+)
 	     (equal? action glfw:+repeat+))
-     (print "input:" key)
+     ;; (print "input:" key)
      (condp equal? key
 	    [glfw:+key-down+
 	     (update-gravity the-space cp:v+ (cp:v 0.0 -1.0))
 	     'update-gravity-down]
+
+	    [glfw:+key-space+
+	     (add-node-at-pos)]
 
 	    [glfw:+key-up+
 	     (update-gravity the-space cp:v+ (cp:v 0.0 1.0))
@@ -150,6 +130,7 @@
 	    [glfw:+key-2+ (load-scene "2")]
 	    [glfw:+key-3+ (load-scene "3")]
 	    [glfw:+key-4+ (load-scene "4")]
+	    [glfw:+key-5+ (load-scene "tower")]
 
 
 	    [glfw:+key-minus+
@@ -160,28 +141,6 @@
 
 	    [glfw:+key-minus+
 	     (parameter-update the-eye-point v+ (make-point 0 0 0.1))]))))
-
-(mouse-button-handler
- (lambda (window button action mods)
-
-   (and (equal? action glfw:+press+)
-	(let* ([p (cp:space-point-query-nearest the-space (the-mouse-v) 4 ff #f)]
-	       [res (filter (lambda (x) (equal? (node-shape x) p)) all-nodes)])
-	  (display `(press ,res)) (newline)
-	  (when (not (null? res))
-	    (node-color-set! (first res) (vector 1 1 1))
-	    (emit-mouse-event (cons 'press (first res))))
-	  res))
-
-   (and (equal? action glfw:+release+)
-	(let* ([p (cp:space-point-query-nearest the-space (the-mouse-v) 4 ff #f)]
-	       [res (filter (lambda (x) (equal? (node-shape x) p)) all-nodes)])
-	  (display `(release ,res)) (newline)
-	  (when (not (null? res))
-	    (node-color-set! (first res) (vector 1 1 1))
-	    (emit-mouse-event (cons 'release (first res)))
-	    )
-	  res))))
 
 (define (drag?)
   (when (and (eq? 'release (car cur-event))
@@ -216,5 +175,26 @@
   (set! prev-event cur-event)
   (set! cur-event pair)
   (drag?)
-;  (click?)
-  )
+  #;(click?))
+
+;; set mouse button handler
+(mouse-button-handler
+ (lambda (window button action mods)
+
+   (and (equal? action glfw:+press+)
+	(let* ([p (cp:space-point-query-nearest the-space (the-mouse-v) 4 ff #f)]
+	       [res (filter (lambda (x) (equal? (node-shape x) p)) all-nodes)])
+	  ;; (display `(press ,res)) (newline)
+	  (when (not (null? res))
+	    (node-color-set! (first res) (vector 1 1 1))
+	    (emit-mouse-event (cons 'press (first res))))
+	  res))
+
+   (and (equal? action glfw:+release+)
+	(let* ([p (cp:space-point-query-nearest the-space (the-mouse-v) 4 ff #f)]
+	       [res (filter (lambda (x) (equal? (node-shape x) p)) all-nodes)])
+	  ;; (display `(release ,res)) (newline)
+	  (when (not (null? res))
+	    (node-color-set! (first res) (vector 1 1 1))
+	    (emit-mouse-event (cons 'release (first res))))
+	  res))))
