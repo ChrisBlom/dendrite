@@ -30,6 +30,8 @@
        scene
        chipmunk-utils)
 
+(include "input.scm")
+
   (define (repeat-list n x)
   (if (positive? n)
     (cons x (repeat-list (- n 1) x))
@@ -38,7 +40,8 @@
 ;;;;; Utils ;;;;;
 
 (when (unbound? 'REPL)
-  (define repl-port 6062)
+  (println "Starting repl on port 6060")
+  (define repl-port 6060)
   (define REPL (make-prepl repl-port)))
 
 ;; (use nrepl)
@@ -135,6 +138,7 @@
   (let ([oldest (ringbuffer-get fps-buffer -1)])
     (ringbuffer-set! fps-buffer 0 dt)
     (set! fps-sum (+ fps-sum dt (- oldest)))))
+
 (define (fps)
   (/ 1000 fps-sum (- (ringbuffer-length fps-buffer) 1)))
 
