@@ -1,0 +1,6 @@
+((author "Chris Blom")
+ (synopsis "Utils")
+ (license "BSD")
+ (category data)
+ (components
+  (extension synth-utils)))

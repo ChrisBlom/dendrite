@@ -1,9 +1,13 @@
 (module synth-utils
   *
-  (import chicken scheme srfi-1 matchable ringbuffer extras gl-math
-	  )
+  (import chicken
+	  scheme
+	  srfi-1
+	  matchable
+	  ringbuffer
+	  extras
+	  gl-math)
   (import-for-syntax chicken scheme srfi-1)
-
 
   (use box)
 
